@@ -1,0 +1,108 @@
+{
+  "task": "idm-training",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "Deterministic, transparent scorer vendored from p-doom with a documented fix, and no judge. But it has no measured floor, a likely strong blind MouseMove baseline, only 43 clips from 10 recordings, and an unstated distillation loophole that decides the $50 winner.",
+  "noise_se_points": 3.0,
+  "floor": "None. task.yaml has no score_normalization, so the score is raw micro-F1 x 100 and 0 = no correct actions. The smoke fixture returns [] (solution/server.py:69-71), which scores 0. Nobody measured a blind baseline. A constant 'MouseMove on every frame F00-F24' gets F1 = 2M/(43*25+919) = 2M/1994, where M is the number of held-out MouseMove frames. On the public clip M is 9 of 14 actions. If M is about 300-450 held-out, the blind floor is about 0.30-0.45. That is near or above the median $10 run (0.36 over 19 models). SUSPECTED.",
+  "ceiling": "1.0 by construction. No oracle or human anchor was measured. Labels come from raw input logs, and MouseMove counts any frame with a nonzero raw delta (actions.py:87-100), including 1-unit moves that may not be visible. So the true attainable ceiling is below 100 and unknown. Not binding: best observed 79.1 (Sonnet), 78.5 (Opus).",
+  "usable_range": "observed 16.1-79.1 of 0-100 across 57 runs (one review-fail 0). The useful range above a blind MouseMove baseline is unknown but probably starts around 30-45.",
+  "feasible_at_10": "yes: Opus 31drnp scored 72.6 spending $5.63. The $10 mean over 19 models is 41.1. Detection of cursor motion and keystrokes is CPU/heuristic friendly, and hand-written rules are allowed (review.py:33-37).",
+  "budget_scaling": "Weak. The 19-model mean is 41.1 / 46.8 / 43.0 at $10/$50/$200, and the medians are 36.0 / 45.1 / 40.5. Approach (data source) matters more than money: Opus's $5.63 synthetic run beats every non-Opus run at any wallet.",
+  "selfcheck_fidelity": "It checks startup, one public clip through the grader parser, and 8 copies of the same public clip against a pro-rated deadline (verifier.py:19-22, 78-85). It reports no F1 (verifier.py:116-117 'its F1 over copies of the public example is not reported'). Timeouts are loose (300 s per clip, 3600 s total for 43 clips; tests/config.json), and no trial zeroed on a gate. The main gap is that all 8 clips are one clip from one recording at 1728x1080. A server that breaks on another resolution or codec would pass self-check. Not observed.",
+  "judge": "none (deterministic matcher, tests/task/actions.py). Reviewer only (Claude Opus 5.5).",
+  "neutrality": "No model-vendor judge. The task names p-doom and uses p-doom's scorer, action format and macOS crowd-cast domain. Knowing p-doom's ecosystem helps: AGI-CAST frames, crowd-cast event format, and the published p-doom/idm pseudo-labels. Those pseudo-labels are only forbidden by a reading of intent. Opus and Fable treated them as forbidden, while Argon and DeepSeek used them and passed review. That asymmetry costs the more conservative agents.",
+  "reference_solution": "solution/ is the shared interface smoke fixture: /actions returns [] (solution/server.py:69-71; solution/README.md:1 'not an oracle or trained model'). It scores 0 and shows nothing about solvability. Solvability is shown only by agent runs (up to 79.1).",
+  "issues": [
+    {
+      "category": "spec",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The prompt bans only starting from a specialist IDM. Training on that IDM's published pseudo-labels (p-doom/AGI-CAST-idm-actions) is neither forbidden nor allowed in writing, and the reviewer passes it. This unstated line decides the $50 winner.",
+      "evidence": [
+        "instruction.md:3 'you may not start from p-doom/idm'",
+        "tests/task/review.py:22-32 checks only 'starting weights' / 'initialization'"
+      ],
+      "affects": "Favours Argon (1rmzib 68.7 at $50, 645e3z) and DeepSeek 4v1bcz. Against Opus/Fable, which avoided the labels as forbidden."
+    },
+    {
+      "category": "anchor",
+      "severity": "med",
+      "status": "suspected",
+      "finding": "No floor was measured, and MouseMove is presence-only at the exact frame with details ignored. A blind 'MouseMove on every frame' output therefore earns F1 = 2M/1994 and could rival many submitted models. The organisers never ran this baseline.",
+      "evidence": [
+        "tests/task/actions.py:132-137 'MouseMove': {'tol_low': 0, 'tol_high': 0, 'match_detail': False}",
+        "tests/task/task.yaml (no score_normalization block)",
+        "public example per-type GT: KeyPress 2, MouseClick 2, MouseMove 9, MouseScroll 1 (from validate outputs in trajectories)"
+      ],
+      "affects": "All models. Low-scoring runs (about 30-40) may not beat a constant. The scale overstates their skill."
+    },
+    {
+      "category": "heldout",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The 43 held-out clips come from only 10 recordings (03e773da has 10 clips, 07debcfb 6). Clips from one recording share a screen, app and user, so the effective sample is far below 43. The public example's recording (654338eb) also supplies 3 held-out clips. The blog's 'out-of-distribution held-out' does not hold here.",
+      "evidence": [
+        "tests/task/idm_sources.json (44 clips, 10 distinct recording_<uuid> prefixes)",
+        "tests/task/idm_data.py:14 VALIDATION_ID '...654338eb..._seg0001/clip_001_mixed'",
+        "tests/task/idm_data.py:27 'heldout = [... if key != VALIDATION_ID]'"
+      ],
+      "affects": "All. Noise is larger than n=43 suggests. Training on the example (allowed) gives a small in-distribution edge to everyone equally."
+    },
+    {
+      "category": "heldout",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The held-out labels are public in two places: the ungated p-doom/idm-eval and the public tasks dataset. Only the prompt rule protects them. No trial touched them.",
+      "evidence": [
+        "tests/task/idm_sources.json 'repo': 'p-doom/idm-eval'",
+        "tests/data.json 'prefix': 'idm-training/private'"
+      ],
+      "affects": "None observed. Integrity depends on the reviewer."
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "CONTRACT says each scroll is labelled once. The GT actually labels every 200 ms frame with a nonzero scroll delta, because the per-run keylog scroll events are dropped and the per-frame scroll events from extract_mouse_gt are kept. The shipped actions.py reveals the real rule.",
+      "evidence": [
+        "environment/validation/CONTRACT.md:11 'Each scroll is labelled once, on the frame it happened'",
+        "tests/task/actions.py:102-111 (per-frame MouseScroll)",
+        "tests/task/actions.py:327 drops keylog MouseScroll"
+      ],
+      "affects": "Agents who trust the CONTRACT text over the code under-predict scrolls. Minor."
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The prompt says 'Train a model', but the review allows hand-written rules to replace a trained model. Fable's training-free $200 heuristic scored 63.2.",
+      "evidence": [
+        "instruction.md:1 'Train a model that infers keyboard and mouse actions'",
+        "tests/task/review.py:35-37 'Hand-written rules may supplement or replace a trained model ... (operator decision, 2026-10-03)'"
+      ],
+      "affects": "Lenient in every direction. Agents who read the prompt literally may over-invest in training."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Matching is greedy in GT order, not optimal bipartite. Inherited from upstream and deterministic. A MouseScroll with details '0' is silently dropped rather than counted as a false positive.",
+      "evidence": [
+        "tests/task/actions.py:140-179 'Greedy bipartite matching'",
+        "tests/task/actions.py:210-214 (direction '' -> None)"
+      ],
+      "affects": "Negligible."
+    },
+    {
+      "category": "heldout",
+      "severity": "low",
+      "status": "suspected",
+      "finding": "Both p-doom/AGI-CAST-0.6k and idm-eval are p(doom) macOS screen recordings. Nothing in the repo checks whether idm-eval clips were cut from AGI-CAST videos. If they were, training on AGI-CAST frames (Opus 31drnp backgrounds, Argon) could include test frames. AGI-CAST file names (e.g. 'AGI-CAST PART 1.mp4', per-person folders) look unrelated to idm-eval's recording_<uuid> names, so overlap seems unlikely.",
+      "evidence": [
+        "trajectory gemini-4-argon__1rmzib: 'AGI-CAST PART 1.mp4', folders alfred/franz/mihir/ylli",
+        "tests/task/idm_sources.json (recording_<uuid> names)"
+      ],
+      "affects": "Would favour Opus 31drnp and Argon 1rmzib/645e3z if it existed. Unverified."
+    }
+  ]
+}

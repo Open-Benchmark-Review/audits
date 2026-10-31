@@ -1,0 +1,96 @@
+{
+  "task": "screen-difference",
+  "fairness_verdict": "unfair",
+  "verdict_rationale": "The published scale is anchored below a measured input-blind constant (32.0), so 14 of 18 audited runs and most of the field score below a fixed paragraph. The metric is recall-only, contrary to the prompt. And 14 pairs judged by a stochastic gpt-6-luna give an SE of about 6 points. Rankings among weak runs carry little signal.",
+  "noise_se_points": 6.0,
+  "floor": "0 = empty description (task.yaml:43-45). Not sensible: the operator measured an input-blind 'exhaustive' paragraph at 0.3199 and kept the floor at 0 by decision (task.yaml:45-49; pipeline/baseline_results.json: cursor 0.026, generic 0.060, exhaustive 0.320).",
+  "ceiling": "1.0 = the reference observations fed back as the candidate (task.yaml:45; baseline_results.json 'reference' 1.0). It is a tautological identity anchor and not reachable by any real describer. Not binding: best observed 46.4.",
+  "usable_range": "observed 0-46.4 (57 runs; 10 zeros). Only about 32-46 lies above the blind constant.",
+  "feasible_at_10": "partly: best $10 run 31.1 (Fable 39iyxm), still below the 32.0 blind paragraph. The 19-model $10 mean is 13.4. A teacher-labelled LoRA on an 8B VLM fits in about 2.9 H100-h but leaves little room for labelling spend.",
+  "budget_scaling": "None on average. The 19-model mean is 13.4 / 11.5 / 14.2 at $10/$50/$200. The top run is at $200 (Fable dlcubp 46.4, $150 spent), and the Opus rows rise 26.8 / 34.4 / 38.0. Otherwise orderings are erratic.",
+  "selfcheck_fidelity": "It runs the full 70-request batch at concurrency 14 on 14 pixel-flipped copies of the single public pair, then a smoke request. No judge (verifier.py:48 'No judge read the descriptions'). Pixel flips make every self-check request unique (verifier.py:72-75, 90-92). In grading, rounds 2-5 are byte-identical repeats of round 1 (evaluation.py:247 'items = requests * rounds'). So self-check is stricter than grading for servers with prefix or encoder caches, a safe direction. The throughput gate depends on the host: Muse 3ys4t8 failed all 4 self-checks (17.6-27.6 s) and passed grading. Held-out image sizes are unknown and may differ from the 1280x720 public pair. A submission can pass self-check and score near 0 with useless descriptions, because nothing scores content.",
+  "judge": "gpt-6-luna (OpenAI), text-only, reasoning_effort 'low', JSON verdict per reference observation (validate.py:40-48). Temperature is not set, so sampling is stochastic: the blind paragraph's per-round score ranges 0.280-0.378, SD 0.041, giving a regrade SE of about 1.8 points over 5 rounds. The prompt explicitly ignores extra claims (validate.py:47). The agents' Spin proxy rejects 'reasoning_effort' with HTTP 400, so dev-time judging must drop it. Agents' local judge then runs at default effort, while grading uses 'low' (seen in 11 of 18 trajectories, e.g. Opus 54jc8d [30]). Gpt-6-luna is also usable as a teacher: Opus 1v1zlc distilled the judge model itself.",
+  "neutrality": "The OpenAI judge also serves as an allowed teacher via Spin (review.py:39-41), so it is open to all agents equally. Judge identity is disclosed in validate.py. No family-specific data or tools. Claude runs used frontier teachers and real GUI frames and dominate. That reflects approach, not access.",
+  "reference_solution": "solution/ is the shared smoke fixture: it returns 'No description available.' (solution/server.py:138-139), about 0. It shows nothing about solvability. The measured baselines in pipeline/baselines.py (blind templates and reference identity) are the only organiser anchors.",
+  "issues": [
+    {
+      "category": "anchor",
+      "severity": "high",
+      "status": "confirmed",
+      "finding": "The floor is 0 = empty output, though an input-blind constant paragraph scores 32.0 on the published scale. Most runs score below that constant, so the 0-100 scale mostly measures how close a model gets to boilerplate.",
+      "evidence": [
+        "tests/task/task.yaml:45-47 'Operator decision (2026-09-27): the floor is not raised to the best input-blind description, which scores 0.3199'",
+        "tests/task/pipeline/baseline_results.json exhaustive 0.3199"
+      ],
+      "affects": "All. Of the 18 audited runs, 14 sit below the blind paragraph (all Argon, Astra, Muse, DeepSeek). Their nonzero scores overstate competence."
+    },
+    {
+      "category": "metric",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The prompt asks for no false claims, but the judge scores recall only and is told not to penalise extra claims. Hedged enumeration of common changes is rewarded unless it contradicts a reference. The blind paragraph proves this pays.",
+      "evidence": [
+        "instruction.md:5 'without claiming anything the screenshots don't show'",
+        "environment/validation/validate.py:47 'do not audit or penalize extra candidate claims'"
+      ],
+      "affects": "Favours verbose describers. Not exploited by any audited run. The throughput gate caps output length."
+    },
+    {
+      "category": "metric",
+      "severity": "med",
+      "status": "suspected",
+      "finding": "Recall-only scoring makes a hybrid gameable: model output plus a fixed appended checklist would likely add up to about 0.3 on weak models. The review checks lookup tables and decoy weights, not appended boilerplate (review.py:44-55), so it might pass.",
+      "evidence": [
+        "tests/task/review.py:44-51 'no_reference_lookup' (tables keyed on image content)",
+        "tests/task/pipeline/baselines.py:27-34 exhaustive template"
+      ],
+      "affects": "Would lift any model. Not observed."
+    },
+    {
+      "category": "heldout",
+      "severity": "high",
+      "status": "confirmed",
+      "finding": "Only 14 held-out pairs (about 3-5 human observations each; the public pair has 5). The SE from pair sampling is roughly 0.25/sqrt(14), about 6-7 points, plus about 1.8 points of judge noise. The repo documents no dataset source, licence or construction pipeline. Only baselines.py exists. Inspirations: 'Tencent' (blog).",
+      "evidence": [
+        "tests/config.json 'expected_samples': 14, 'screen_rounds': 5",
+        "tests/task/pipeline/ contains only baselines.py and baseline_results.json"
+      ],
+      "affects": "All. Gaps under about 10 points between runs (e.g. the $10 win 31.1 vs 26.8) are not significant."
+    },
+    {
+      "category": "gate",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "An all-or-nothing throughput gate: 70 requests at concurrency 14 must finish within 14 s, or the whole run scores 0. The measurement depends on host variance, and the grade page does not show the measured batch time. Across all 19 models, 9 runs scored 0 with a passing review. The likely cause is this gate or the >5% failure limit; the cause is not shown on grade pages.",
+      "evidence": [
+        "environment/validation/CONTRACT.md:11 'a slower batch scores zero'",
+        "tests/lib/frontier_ml/validation/evaluation.py:50-53 budget = len(items)/minimum_per_second",
+        "data/all_trials.csv: screen-difference zeros with review=pass: 332t8b, 5wnsf8, 1txn63, 6c4hxp, 1xcat3, 1vz3ax, 25scwq, 2yhzs3, 2lnqqg"
+      ],
+      "affects": "Near-threshold servers and larger or slower models. It penalises spending on capacity (bigger VLMs) in a quality task."
+    },
+    {
+      "category": "gate",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Dev-judge mismatch: the shipped validator sends reasoning_effort 'low', which the agents' Spin proxy rejects with 400. Agents must patch it and then judge at default effort, unlike grading.",
+      "evidence": [
+        "environment/validation/validate.py:41 'reasoning_effort': 'low'",
+        "trajectory claude-opus-5-5__54jc8d:1584 'unsupported request fields: reasoning_effort'",
+        "screenshot-generation/environment/validation/screenshot_generation.py:68-72 (other task drops it for this reason)"
+      ],
+      "affects": "All agents that tried judge-scored validation (11 of 18 hit it). Small calibration drift."
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The CONTRACT and task.yaml evaluation text leave out the held-out size ('averaged over  pairs'). validate.py's docstring gives 14. The judge also grades 'unchanged state if the reference includes it', which the prompt (describe what changed) does not mention.",
+      "evidence": [
+        "environment/validation/CONTRACT.md:11 'Quality is averaged over  pairs'",
+        "environment/validation/validate.py:46 'Evaluate unchanged state if the reference includes it'"
+      ],
+      "affects": "Minor."
+    }
+  ]
+}

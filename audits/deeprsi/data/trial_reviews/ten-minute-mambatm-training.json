@@ -1,0 +1,227 @@
+{
+  "task": "ten-minute-mambatm-training",
+  "task_level": {
+    "spec_issues": [
+      "The task id says 'improve-worst-seed-held-out-restoration', but every private breakdown shows a single run (seed 1009, budget_sec 600). No minimum over seeds is visible, and the overview itself says 'The grader runs the training code once'.",
+      "The overview says 'its weights must start random', but the prompt only says 'submit source code without fitted weights or learned state, and seed training from TRAIN_SEED'. Deterministic structured initialisations (identity/zero-residual in both Fable runs, Haar/phase filter banks in both GPT runs, orthogonal heads in Argon FY7nqr9) are allowed by the prompt and arguably not by the overview.",
+      "'The network's design is fixed' is enforced only by loading the weights into the pristine architecture. Zeroing whole branches keeps tensor shapes and passes that check, so functional pruning of the fixed model is possible: GPT YTBJxY3 disables the reference branch, all encoder residual blocks and most MLP channels. The spec does not say whether this is allowed."
+    ],
+    "verifier_issues": [
+      "Public and private differ only in seed (public run_public.sh uses SEED=11; private uses 1009) and evaluation set (60 dev videos vs 100 hidden). The private seed never appears in any trajectory, so no agent could tune to it. All 12 submissions pass TRAIN_SEED through.",
+      "The 600 s budget is enforced by the trusted harness: sandbox.run(['bash', train.sh], ..., time.monotonic() + cfg['budget_sec']) kills the trainee process, and the last saved final.pth is scored (run_eval.py train_one, seen in gemini-3.8-flash__TyjF4sF [15]). Interpreter start-up counts against the budget. Because the budget is wall-clock, the grading host's speed changes the iteration count.",
+      "The private baseline_objective is a fixed constant (0.00047263) for every trial, so the baseline does not drift between trials.",
+      "GPT YTBJxY3 has an official reward (3.67) but an empty rewards breakdown, so its validity flags cannot be checked from public data."
+    ],
+    "noise": "Run-to-run noise is small compared with most gaps. Agents measured seed spreads of std ~0.03 dB (Kimi JzJ47n2, 28 runs: 39.13 +/- 0.03), a range of 0.26 dB over 25 runs (Kimi 5m5S6zx), 0.1 dB over 3 seeds (Argon ofZBjWJ) and 0.4 dB (Gemini Flash Jmpd9jd). Near reward ~4, 0.1 dB is about 0.1 reward. The private ranking matches the agents' public dev means: Fable sQ6APHS 39.62 -> 40.10, GPT 39.28 -> 39.96/39.95, Kimi JzJ47n2 39.13 -> 39.75, Fable SdLt2sb ~38.9 -> 39.61, Argon ofZBjWJ 38.86 -> 39.58. Most trials move by +0.5 to +0.7 dB. Two outliers (Gemini Flash Jmpd9jd -0.36 dB, Grok RFTutPt +0.19 dB) show single-run variance on the graded run, but neither changes a top placement. Pairs within ~0.1 dB on the private run are coin flips: GPT 3.68 vs 3.67, Fable SdLt2sb 3.32 vs Argon ofZBjWJ 3.29, Grok RFTutPt 2.70 vs Argon FY7nqr9 2.65, and arguably Kimi JzJ47n2 3.46 vs Fable SdLt2sb 3.32. Fable's best run is about 0.14 dB above GPT privately and 0.34 dB on dev, so it is clearly best.",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "The scoring mechanics hold up: hidden fixed seed, hard wall-clock kill, constant baseline, and seed noise at or below ~0.1 dB, smaller than the gaps that decide the top games. One caveat is a rules question, not a measurement defect. If GPT YTBJxY3's zero-weight pruning were ruled illegal and the run zeroed, the Fable-vs-GPT game would go from 0.5 to 0.75 for Fable. Fable already holds the best single run either way.",
+    "science_vs_gaming": "Almost all of the 3-7 dB gain comes from routine throughput and optimisation engineering: GPU-resident data, CUDA graphs, dropping the costly LPIPS and re-blur losses, higher LR with time-based schedules, Muon, EMA, and crop/clip-length curricula that end on the evaluation geometry. The most transferable ideas are identity-preserving structured initialisation (Haar/phase filter banks, GPT) and the finding that geometric augmentation hurts because of the Hilbert scan's orientation dependence (Fable). There is no evidence of seed tuning, dev-set fitting or budget circumvention. The one benchmark-exploiting move is GPT YTBJxY3 training a functionally pruned MambaTM inside the 'fixed' architecture, and it gained nothing over its unpruned sibling."
+  },
+  "trials": [
+    {
+      "model": "claude-fable-5.1",
+      "trial": "sQ6APHS",
+      "official_reward": 3.8367621379156454,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Throughput and optimiser recipe: train+val clips kept on GPU, TF32 + channels_last, a CUDA-graph-captured step (~3x the baseline iteration rate), Charbonnier loss only (LPIPS and re-blur losses dropped), Muon on matrix weights plus AdamW with Mamba blocks at 2x LR, a wall-clock warmup/constant/cosine schedule that ends at the deadline, and a 96->192 crop / 12->30 frame curriculum that ends on the evaluator's 192x192x30 tiles. A deterministic identity initialisation of a pass-through path added about +0.07 dB.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [313]/[316]: final recipe list with ablations ('Muon ... +0.4 dB', 'Curriculum ... +0.3 dB', 'Identity initialisation ... +0.07 dB'); public seed-11 dev PSNR 39.62 dB vs 33.36 baseline",
+        "trajectory [313]: a zero-init variant 'did not hold up on a second seed (39.48 vs 39.62 dB)', which shows a seed-to-seed spread of roughly 0.1 dB",
+        "patch.diff code/TM_model/MambaTM.py hunk @@-173: only caches Hilbert-curve tensors, so the forward pass is unchanged and evaluator-compatible",
+        "patch.diff train.sh: passes --seed \"$TRAIN_SEED\"; no reference to /data/flir/dev in the patch",
+        "private objective 9.77e-5 (40.10 dB) vs 39.62 dB on public dev; private-minus-dev offset +0.48 dB, in line with the other trials"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5.1",
+      "trial": "SdLt2sb",
+      "official_reward": 3.321091112180927,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Two-phase time-based curriculum (70% of the window on 128x128x16 clips, then 192x192x30 tiles laid out like the evaluator's), lr 1e-3 cosine with Adam beta1 0.95, bf16, CUDA graphs, GPU-resident train+val data, identity (zero-residual) initialisation, EMA export, no augmentation.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [368]: 'time-based 2-phase curriculum 128x128x16 -> 192x192x30 tiles, lr 1e-3 cosine ... bf16, CUDA graphs, identity init, EMA export'; '~38.9 dB mean dev PSNR over 25 seeds'",
+        "patch.diff train.sh: '--t_curriculum 0.7:16,1.0:30 --ps_curriculum 0.7:128,1.0:192 ... --init identity --ema 0.999 --crop_mode tiles'",
+        "patch.diff code/TM_model/MambaTM.py: Hilbert-curve cache only; the evaluator loads weights into its own pristine model"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "UYJMgrE",
+      "official_reward": 3.6791296547796364,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "GPU-cached train+val clips with CUDA graphs and fused AdamW; Charbonnier loss without LPIPS/re-blur; short warmup then cosine over the wall-clock budget; EMA 0.98; staged crops 64->128->192 and 16->30 frames; no augmentation. A data-independent 'Haar filter-bank' initialisation sets the strided encoder/decoder convs to Haar analysis/synthesis and scales residual branches by 0.01, so the untrained network starts close to identity (+0.1 dB over plain identity init).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff code/initialization.py: 'Analytical, data-independent initialization ... Haar analysis/synthesis bank'; every parameter stays trainable",
+        "trajectory [99] notes: 'Haar filter-bank initialization ... improves .105 dB over identity; 48/60 videos improve'; 'No geometric or temporal augmentation wins by ~.33 dB'",
+        "trajectory [206]: '39.30 dB mean PSNR across four seeds ... Final actual-source run: 39.28 dB, 596.2 seconds'",
+        "trajectory [3]: read run_public.sh (public seed 11) and run_eval.py; private seed 1009 never appears in the trajectory"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "YTBJxY3",
+      "official_reward": 3.6698112473073783,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Same family as UYJMgrE (GPU cache, CUDA graphs, phase/identity initialisation, EMA, late switch to larger crops). The final train.sh, however, trains a functionally pruned network. '--mode partial --no_reference' zeroes and freezes the whole reference branch (ref encoder/decoder and the reference Mamba blocks); '--spatial_skip encoder_all' zeroes and bypasses every encoder residual block; '--mlp_width 256' zeroes the remaining MLP channels. Tensor shapes stay the same, so the evaluator's 'fixed' MambaTM computes a smaller network.",
+      "classification": "grey_area",
+      "novelty": "known_technique",
+      "grader_agreement": "unclear",
+      "evidence": [
+        "patch.diff train.sh: '--mode partial --regular_blocks 4 --no_reference --mlp_width 256 --spatial_skip encoder_all'",
+        "patch.diff code/partial_training.py: inactive blocks get 'out_proj.weight.zero_(); fc2.weight.zero_(); requires_grad_(False)'; with reference=False the 'convert_ref, ref_encoder, ref_decoder' are frozen and skipped",
+        "patch.diff code/spatial_pruning.py: encoder residual heads 'head.weight.zero_()' and forward replaced by identity; code/channel_pruning.py: 'Discarded channels cannot affect pristine evaluation'",
+        "trajectory [30] work log: 'The frozen temporal branches have exactly zero residual heads, so skipping them in the training forward is equivalent to the fixed inference model'",
+        "trajectory [592]: final summary says 'pristine inference architecture are preserved' and does not mention that the reference branch is disabled",
+        "summary.json rewards = {} (no breakdown, no exception), so validity and seed cannot be checked from public data. The score matches its sibling UYJMgrE (3.68), which trains the full network, so the pruning does not inflate the score; whether zero-weight pruning breaks 'the network's design is fixed' is a rules question the spec leaves open"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "JzJ47n2",
+      "official_reward": 3.464339461568999,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "GPU-resident native-resolution crops with h/v and temporal flips, batch-1 Charbonnier, Muon (batched fp32 Newton-Schulz) plus capturable fused AdamW with a WSD schedule, the full step captured in a CUDA graph (~7100 iters / 600 s), and an eager 30-frame tail that matches the evaluation clip length.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [324]: 'dev PSNR 39.13 +/- 0.03' over 28 official harness runs of the final artifact, i.e. very low run-to-run noise",
+        "patch.diff train.sh: '--optimizer muon --muon_lr 0.005 --adam_lr 3e-3 ... --decay_frac 0.6 --tail_t30 0.08 --cuda_graph 1'"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "ofZBjWJ",
+      "official_reward": 3.2905176080949134,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Five-stage resolution/length curriculum (128x128xT8 -> ... -> full 192x256x30 frames) with CUDA graphs, channels_last, fused AdamW, stretched cosine, and EMA ramp. The last 10% of training differentiates through the evaluator's 2-tile overlap averaging (0:192 / 64:256). The loss moves from Charbonnier to grayscale per-frame RMSE plus deep supervision of the LPD output, and the 3 grayscale output channels are tied at export.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [774]: 'Stage 4 ... Full-frame 192x256, T=30 ... differentiating directly through the evaluator's 2-tile spatial overlap-averaging operator'",
+        "trajectory [774]: seeds 11/22/33 give 38.86/38.89/38.79 dB on dev (spread 0.1 dB)",
+        "The tiling it matches is the fixed, public inference procedure that every evaluated video uses (all 192x256x30), so this is train/test alignment rather than gaming"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "FqScPza",
+      "official_reward": 2.916060100743124,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "New fast_train.py: Adam 1.3e-3 cosine with floor 0.3, Charbonnier eps 0.05 + 0.05 SSIM, EMA 0.999 -> 0.99 late, train+val, h/t flips, 128px pretraining then a 192px phase-2 fine-tune (62% of time) matched to the evaluation tiles.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [1519]: 'official score is 38.591 dB (reward 2.341)' on public dev",
+        "patch.diff code/TM_model/MambaTM.py: adds training-only feature dropout (getattr default 0, active only when self.training), so inference is unchanged",
+        "patch.diff code/fast_train.py: '--init_ckpt' option exists but train.sh does not pass it, so training starts from random weights"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "RFTutPt",
+      "official_reward": 2.6985000107153976,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Rewritten train_flir.py: 160px crops (vertical crop), MSE + 0.1 edge-L1 + 0.02 local-correlation cosine + 0.02 8x8 SSIM, lr 1e-3, with the last 8% of steps at T=30 / patch 128.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [593]: 'patch 160 with a vertical crop, MSE plus a 0.1 edge L1, a 0.02 local correction cosine, and a 0.02 8x8 SSIM ... public harness score ... 38.75 dB'",
+        "Private 38.94 dB is only +0.19 dB over public dev, against a typical +0.6 dB for other trials, which suggests single-run variance on the graded run"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "FY7nqr9",
+      "official_reward": 2.646873576457974,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "3-tier layer-wise LR (1.55x Mamba, 1.0x U-Net, 0.4x heads) with warmup-hold-cosine at 1.6e-3, QMC-stratified crop sampling, a T=16 -> T=30 curriculum, a restored Mamba dt_proj bias init, and kernel speedups (index_select instead of scatter_add_). It also zeroes and freezes the backward scan of the 3 GMamba layers in the last block (exact pruning of that branch) and averages the grayscale readout channels at export.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff code/train_flir.py fix_mamba_dt_init: 'for p in (m.conv1d_b.weight, ... m.D_b): p.zero_(); p.requires_grad_(False)' for GMamba only, so a small slice of the network is pruned (contrast GPT YTBJxY3)",
+        "trajectory [126]: 'if the weights and biases of self.conv1d_b are zero, x_b becomes zero ... entire output y_t also collapses to zero'",
+        "trajectory [335] final: public 'PSNR = 38.45 - 38.46 dB'"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "5m5S6zx",
+      "official_reward": 2.5440942545271175,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "GPU fast dataset, 112px x 16-frame crops, lr 1.2e-3 with weight decay, re-blur loss off, CUDA graphs, EMA with bias correction; exports the best EMA by validation (val is allowed fitting data).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [486]: '38.14 dB mean dev PSNR across 25 official runs (all valid, range 38.01-38.27)'",
+        "patch.diff train.sh: '--patch-size 112 --num_frames 16 --batch-size 1 --learning-rate 1.2e-3 --weight_decay 1e-4 --rt_weight 0 --graph 1'"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "TyjF4sF",
+      "official_reward": 2.1666576766932115,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "In-GPU caching of train+val, LPIPS dropped, re-blur loss kept with grayscale warping, LR tuned to 1.2e-3, time-based cosine, plus MSE (0.5), SSIM (0.15) and boundary-aware patch sampling, at 192px / 16 frames.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [2562]: 'Optimized Recipe (Validated Record) 600s 37.791 dB'; the ablation table shows most of the gain from 'Learning Rate Tuning (1.2e-3)'",
+        "summary.json: 200 user turns (frequent sandbox rotation); no effect on scoring"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "Jmpd9jd",
+      "official_reward": 1.6093647728203182,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "GPU caching + train+val + TF32, LR tuned to 1.22e-3, WSD schedule, orthonormal 2D FFT loss 0.05, SSIM loss 0.02, grad clipping 2.0, and EMA 0.999 at 192px / 16 frames with the starter iteration logic.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [578]: '37.777 dB (+4.41 dB)' on public seed 11; 'Across extensive multi-seed validations ... 37.6-38.0 dB'",
+        "Private 37.42 dB is 0.36 dB below its public dev result, while every other trial gains +0.2 to +0.7 dB. That points to an unstable recipe or an unlucky graded run, but the trial would still rank last either way"
+      ],
+      "confidence": "high"
+    }
+  ]
+}

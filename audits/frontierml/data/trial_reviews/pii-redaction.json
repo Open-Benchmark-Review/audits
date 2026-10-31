@@ -1,0 +1,348 @@
+{
+ "task": "pii-redaction",
+ "task_level": {
+  "spec_issues": [
+   "Both splits come from one public dataset: 'Both of this task's splits (39 public, 161 held-out documents) are drawn from the public test parquet of RedactionBench/RedactionBench ... so only the contract's rule and this review stand between a candidate and training on the held-out documents' (induction-labs/frontier-ml/tasks/pii-redaction/tests/task/review.py:3-5). 39 + 161 = 200, the whole benchmark.",
+   "Six trials identified RedactionBench and read its paper or dataset card: Opus 26nv7h [15]-[17], Opus lhhzy1 [16]-[18], DeepSeek e5woud [17]-[19], DeepSeek 1x9i5n [26]-[28], DeepSeek 4fz83a [17] and [24], and Gemini 42p1pf [54]. All recognised the remaining docs as the hidden test ('This is a trap', e5woud [19]) and did not download them; the reviewer confirmed this in each case. Reading the annotation guidelines and the paper's R-score definition is not forbidden, and the reviewer treated it consistently across Opus and DeepSeek.",
+   "Caching is not forbidden here, unlike ai-text-detection. The pii CONTRACT has no 'without caching' clause, and review.py's no_lookup check covers stored evaluation documents, not runtime caches.",
+   "The 39 public docs may be used for anything (operator decision, review.py:32). Training on them pays off: Gemini 53wwy5 scored 79.0, the task top, training mainly on the 39 docs, 125 programmatic docs and 250 Nemotron rows, at $10.47 spend."
+  ],
+  "verifier_issues": [
+   "Metric: mean document R-score over 161 docs, rescaled so one span over each whole document (0.2351) is 0 and gold is 100 (tests/task/task.yaml:40-43).",
+   "Throughput is a hard gate on the full batch: the deadline is 161/5 = 32.2 s (tests/task/verifier.py:51). Requests go out in chunks of 64 at concurrency 32, and each chunk has to finish before the next starts (frontier_ml/runtime/resources.py:634). One slow long document stalls a chunk.",
+   "The selfcheck throughput batch repeats the 39 public docs in order i % 39 (tests/task/verifier.py:52). A text-keyed cache then serves essentially all of chunks 2-3 from memory, so the selfcheck overstates a caching server's speed on 161 distinct held-out documents. The selfcheck prints a warning about this. This is what happened to DeepSeek e5woud."
+  ],
+  "noise": "161 documents. With a per-doc R-score SD of about 0.2, the SE of the mean is about 0.016 raw, or about 2 points on the 0-100 scale (paired differences are somewhat smaller). At $10, Fable 2aapqb (74.8) and Opus lhhzy1 (73.1) are within noise. At $200, Gemini 53wwy5 (79.0) and Opus 26nv7h (77.9) are within noise. At $50, Opus 4adt61 (77.3) leads Fable (70.0) and Astra (68.0) clearly. Wallet order is erratic for most models: Fable 74.8/70.0/71.3, Gemini 69.7/58.2/79.0, Astra 64.8/68.0/59.0, Muse 67.3/39.3/63.4. Only Opus rises monotonically (73.1/77.3/77.9).",
+  "elicitation": "DeepSeek, Gemini and Muse spent little of the wallet ($0.9-$35); the 39 public docs and synthetic generation mattered more than compute. Fable 2aapqb's third selfcheck failed for infrastructure reasons and was not counted ([169]); it had no effect on the score. Gemini trials ran on 2026-10-14, after the public release; none accessed the frontier-ml-tasks dataset or repo. DeepSeek 1x9i5n [6]-[7] looked in the local /opt/frontier-ml harness package, which is shipped validation code.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "All 18 reviews passed and I agree with each. The one zero (DeepSeek e5woud) is a genuine throughput-deadline miss by a slow rules+NER pipeline whose selfcheck passes were inflated by a text cache the agent added knowingly. It is not an infrastructure or grading error. The winners (Fable at $10, Opus at $50, Gemini at $200) are within noise of Opus at $10 and $200, but no scoring defect changes them.",
+  "science_vs_gaming": "No trial gamed the scorer. The scores are engineering: encoder token taggers (DeBERTa-v3-large, ModernBERT-large) trained on LLM-written synthetic documents styled after the 39 public docs (Opus, Fable), or on public PII train corpora (Nemotron-PII, gretel, ai4privacy) plus the 39 docs (Astra, Gemini, Muse, DeepSeek), with threshold decoding tuned by out-of-fold CV on the 39 docs. The decisive factor is matching RedactionBench's idiosyncratic mandatory/contextual annotation policy, which agents learned from the 39 docs and, in six trials, from the benchmark's paper and dataset card. Generic PII corpora alone transfer poorly (DeepSeek e5woud [22] notes the paper's ai4privacy-trained baseline scores 0.27)."
+ },
+ "trials": [
+  {
+   "model": "claude-fable-5-1",
+   "trial": "2aapqb",
+   "wallet": 10,
+   "official_score": 74.8,
+   "official_review": "pass",
+   "approach": "DeBERTa-v3-large token classifier with content and whitespace heads, trained on 2,137 synthetic documents generated with deepseek-v4-flash, gpt-oss-120b and deepseek-v4-pro (few-shot from the 39 docs) plus the 39 docs themselves. Probability thresholds were tuned and a generic name regex applied.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: 'final_train_log shows 2137 synthetic docs and 39 GT docs'.",
+    "[169] third selfcheck 'failed for infrastructure reasons (not counted)'; the rerun passed at 12.5 docs/s.",
+    "Raw R 0.8071 -> 74.8 (top at $10)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "2cb5cv",
+   "wallet": 50,
+   "official_score": 70.0,
+   "official_review": "pass",
+   "approach": "DeBERTa-v3-large token classification trained only on LLM-generated synthetic documents (Gemini-3-flash, DeepSeek), with the 39 docs used as few-shot prompts and for selection.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: 'I found no load_dataset call, no download of a hidden or test split'.",
+    "Raw R 0.7709."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "3xs9c5",
+   "wallet": 200,
+   "official_score": 71.3,
+   "official_review": "pass",
+   "approach": "ModernBERT-large 4-label tagger (soup of seeds) trained on 2,407 synthetic docs plus the 39 public docs at weight 8. Decoding policy chosen by 3-fold CV on the 39 docs.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[215] 'the variant-augmented soup scores 0.872 vs 0.868 ... within noise'.",
+    "Raw R 0.7808."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "lhhzy1",
+   "wallet": 10,
+   "official_score": 73.1,
+   "official_review": "pass",
+   "approach": "ModernBERT-large encoder with custom heads trained on about 2,123 synthetic docs (Faker seeds, few-shot from the provided docs) plus the 39 docs x3. Decoder thresholds calibrated by 3-fold OOF. Read RedactionBench's dataset card only.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[18] 'RedactionBench only has a `test` split, so I'll avoid downloading or using its data, but I'll fetch just the README'.",
+    "Raw R 0.7941."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "4adt61",
+   "wallet": 50,
+   "official_score": 77.3,
+   "official_review": "pass",
+   "approach": "Ensemble of two DeBERTa-v3-large 4-class taggers (B and C) trained on LLM-generated synthetic docs plus entity-swapped copies of the 39 public docs, with a pipelined server.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[245] 'the final B+C ensemble serves the validation set at **10.7 docs/s**'.",
+    "Raw R 0.8264 (top at $50)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "26nv7h",
+   "wallet": 200,
+   "official_score": 77.9,
+   "official_review": "pass",
+   "approach": "Averaged ensemble of two ModernBERT-large taggers trained on 7,041 synthetic docs from Gemini-3-flash, Claude Sonnet 5 and GPT-5.4-mini, styled on the 39 docs. The 39 docs were used only for evaluation, member selection and threshold. Read the RedactionBench paper for its annotation guidelines.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[18] 'Since RedactionBench has no public training split, I'll synthesize labeled training data matching its style'.",
+    "Raw R 0.8308."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "e5woud",
+   "wallet": 10,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Rules (about 40 regexes, Luhn/IBAN checks, field labels) plus zero-shot Davlan/xlm-roberta-large-ner-hrl PER spans, extended by an XLM-R-base tagger trained on ai4privacy english_pii_43k and the 39 docs x20. Public R-score was 0.8898. The server was CPU-bound and missed the 32.2 s grading deadline, so the score is 0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade: 'Batch exceeded 32.2s deadline; score is zero' with review pass 5/5; the zero is a throughput gate, not the review.",
+    "[399] after selfcheck 1 failed throughput: '**Cache identical texts** (helps selfcheck, not grading) ... it inflates the selfcheck metric vs grading'. [407] adds a text-keyed cache (PII_CACHE_MAX 256).",
+    "[418] 'the selfcheck's throughput stage would be misleadingly fast due to caching ... the grading set has 161 distinct docs'. [418] also estimates that 161 docs on the dev 3090 take about 34 s, over the 32.2 s deadline.",
+    "The selfcheck batch is ordered i % 39 (tests/task/verifier.py:52) and sent in chunks of 64 (resources.py:634), so the 16.7-18.4 s passes computed only about 39-64 distinct docs. 161 distinct docs plausibly took well over 32.2 s. Other servers passed grading with uncached selfcheck times up to 21.8 s (Muse 3sgm5q).",
+    "Caching is not forbidden by the pii CONTRACT, so the review pass is correct. Davlan is a generic NER model, allowed by review.py:34-51."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "1x9i5n",
+   "wallet": 50,
+   "official_score": 65.2,
+   "official_review": "pass",
+   "approach": "ModernBERT-base multi-head tagger: pretrained on ai4privacy-300k, Nemotron-PII and gretel train splits, then fine-tuned on the 39 docs. Thresholds chosen by OOF on the 39 docs.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[27] 'The hidden test is the remaining ~161. We must not train on the test split of RedactionBench'.",
+    "Raw R 0.7336."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "4fz83a",
+   "wallet": 200,
+   "official_score": 43.3,
+   "official_review": "pass",
+   "approach": "ModernBERT-large trained on the 39 docs, 60 value-substituted copies of each, and template documents. This overfit the public docs.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: Nemotron and LLM templates were 'used only in experiments, not in the final checkpoint'.",
+    "Raw R 0.5667 -> 43.3."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5up6s0",
+   "wallet": 10,
+   "official_score": 69.7,
+   "official_review": "pass",
+   "approach": "ModernBERT-large 5-label tagger trained in 3 stages and merged as a soup. Data: Nemotron-PII train, two public secrets corpora, BIP-39 synthetic docs, and the 39 docs with entity swaps.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: test and eval files were listed at trajectory#38 but not downloaded.",
+    "Raw R 0.7684 -> 69.7."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "42p1pf",
+   "wallet": 50,
+   "official_score": 58.2,
+   "official_review": "pass",
+   "approach": "Three ModernBERT-large members trained on gretel and Nemotron train splits, template docs and the 39 docs, plus regex post-processing.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: one rule returns early for text starting 'NOTICE OF TAX LIEN', a document type from the public docs. review.py:52-61 allows using the 39 docs this way.",
+    "[54] found RedactionBench on HF and chose not to use it. Score 58.2."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "53wwy5",
+   "wallet": 200,
+   "official_score": 79.0,
+   "official_review": "pass",
+   "approach": "Two DeBERTa-v3-large taggers (A and B averaged, A alone on long docs) with a custom 4-label head, trained on the 39 public docs, 125 programmatic synthetic docs and 250 Nemotron-PII rows. Calibrated by 5-fold OOF on the 39 docs, plus generic regexes.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: 'Calibration and selection use 5-fold OOF on the 39 provided docs only'.",
+    "Raw R 0.8391 -> 79.0 (task top, $10.47 spent)."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "k0q9yq",
+   "wallet": 10,
+   "official_score": 64.8,
+   "official_review": "pass",
+   "approach": "Averaged ModernBERT-base and ModernBERT-large 3-class taggers trained on 45k ai4privacy train rows, Faker docs and the 39 docs with augmentations, plus generic regexes.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[147] 'Provided-example mean R-score: 0.99983; these examples were used for training'.",
+    "Held-out 64.8."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "30qjku",
+   "wallet": 50,
+   "official_score": 68.0,
+   "official_review": "pass",
+   "approach": "ModernBERT-large trained in stages on Nemotron, gretel and ai4privacy train splits, DeepSeek-generated docs and the 39 docs, then weight-averaged.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[202] supplied-example R 0.9948; held-out raw 0.7552.",
+    "Review: the 'oracle' at step 38 is a tokenisation bound on public docs."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "245nmx",
+   "wallet": 200,
+   "official_score": 59.0,
+   "official_review": "pass",
+   "approach": "ModernBERT-base 5-label tagger plus a ModernBERT-large auxiliary, trained on public PII train splits, Faker records, gpt-4.1-mini generated documents and the 39 docs.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[92] 'R-score: 0.9996 on your supplied examples, which were also used for training'; held-out 59.0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "5x5l83",
+   "wallet": 10,
+   "official_score": 67.3,
+   "official_review": "pass",
+   "approach": "Two DeBERTa-v3-large taggers trained only on the 39 public docs; an ai4privacy-400k auxiliary was tried and rejected.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: 'train_m1.log and train_m2.log both report docs=39 aux=0'.",
+    "Score 67.3 from 39 training docs alone."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "1x9cpi",
+   "wallet": 50,
+   "official_score": 39.3,
+   "official_review": "pass",
+   "approach": "Ensemble of DeBERTa-v3-base and ModernBERT-large/base taggers trained on the 39 docs plus an ai4privacy-400k train subset, selected by 2-fold CV on the 39 docs.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Raw R 0.5358 -> 39.3; selfcheck 18.0 s."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3sgm5q",
+   "wallet": 200,
+   "official_score": 63.4,
+   "official_review": "pass",
+   "approach": "Ensemble of DeBERTa-v3-large/base and ModernBERT-base taggers trained on the 39 docs, deterministic augmentations and 30k ai4privacy-200k rows; regex layer disabled.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Raw R 0.7203 -> 63.4; selfcheck 21.8 s and 21.2 s, and it still passed grading."
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

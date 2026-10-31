@@ -1,0 +1,401 @@
+<title>FrontierML Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an audit dossier. Sticky contents rail on the left, a single reading column on the right; stacks to one column on phones. */
+:root {
+  --bg: #f6f7f8;
+  --paper: #ffffff;
+  --ink: #16202a;
+  --muted: #5a6672;
+  --rule: #dde2e7;
+  --accent: #1f5f73;
+  --accent-soft: #e3eef1;
+  --flag: #b23a2a;
+  --flag-soft: #f8e5e1;
+  --pass: #2f6b3e;
+  --pass-soft: #e2efe5;
+  --warn: #8a5a00;
+  --warn-soft: #f6ecd6;
+  --code-bg: #eef1f4;
+  --font-display: "Newsreader", "Iowan Old Style", "Georgia", serif;
+  --font-body: "Public Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1418; --paper: #151c21; --ink: #e4e9ed; --muted: #9aa6b0; --rule: #2a343c;
+    --accent: #7cc0d3; --accent-soft: #1b2d34;
+    --flag: #f08a78; --flag-soft: #3a1f1b; --pass: #86c995; --pass-soft: #1b2e21;
+    --warn: #e2b764; --warn-soft: #33290f; --code-bg: #1d262c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1418; --paper: #151c21; --ink: #e4e9ed; --muted: #9aa6b0; --rule: #2a343c;
+  --accent: #7cc0d3; --accent-soft: #1b2d34;
+  --flag: #f08a78; --flag-soft: #3a1f1b; --pass: #86c995; --pass-soft: #1b2e21;
+  --warn: #e2b764; --warn-soft: #33290f; --code-bg: #1d262c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.05em 0.35em; border-radius: 3px; overflow-wrap: anywhere; }
+
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+
+/* masthead */
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.back { display: inline-block; margin-bottom: 18px; font-size: 14px; }
+header.mast { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); margin-bottom: 32px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(34px, 5vw, 52px); line-height: 1.08; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 28px; margin: 6px 0 0; }
+.meta div { min-width: 0; }
+.meta dt { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.meta dd { margin: 2px 0 0; font-size: 15px; }
+.verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: var(--flag); background: var(--flag-soft); padding: 3px 12px 3px 10px; border-radius: 999px; }
+.verdict::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--flag); }
+.howlink { font-size: 14px; }
+
+/* two-column body */
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; align-items: start; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); font-size: 14px; }
+nav.toc ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+nav.toc ol ol { padding-left: 14px; margin-top: 4px; gap: 4px; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover { color: var(--ink); }
+main { min-width: 0; max-width: 760px; }
+
+section { padding-block: 8px 28px; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 28px; line-height: 1.2; margin: 18px 0 12px; text-wrap: balance; scroll-margin-top: 16px; }
+h3 { font-size: 17px; font-weight: 700; margin: 26px 0 8px; scroll-margin-top: 16px; }
+p { margin: 0 0 14px; }
+.lede { font-size: 18px; line-height: 1.6; }
+ul.errs { padding-left: 20px; margin: 0 0 14px; display: grid; gap: 12px; }
+ul.errs li::marker { color: var(--accent); }
+.term { font-weight: 700; }
+
+/* key figures */
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin: 22px 0 26px; }
+.fig { background: var(--paper); padding: 14px 16px; min-width: 0; }
+.fig b { display: block; font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fig span { font-size: 13px; color: var(--muted); }
+.fig.bad b { color: var(--flag); }
+
+/* tables */
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); margin: 12px 0 18px; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+thead th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; background: var(--paper); }
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td code { white-space: nowrap; }
+.type { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.t-fp { color: var(--warn); background: var(--warn-soft); }
+.t-fn { color: var(--accent); background: var(--accent-soft); }
+.t-imp { color: var(--flag); background: var(--flag-soft); }
+.tally { font-size: 15px; }
+.tally b { font-variant-numeric: tabular-nums; }
+
+/* rubric blocks */
+.rub { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 16px 18px; margin: 12px 0 14px; display: grid; gap: 10px; }
+.rub h4 { margin: 0; font-size: 16px; font-weight: 700; }
+.rub .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.rub ul { margin: 2px 0 0; padding-left: 18px; }
+.opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.opt { font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); }
+.opt.on { font-weight: 700; border-color: transparent; }
+.opt.on.flag { color: var(--flag); background: var(--flag-soft); }
+.opt.on.pass { color: var(--pass); background: var(--pass-soft); }
+.opt.on.neutral { color: var(--accent); background: var(--accent-soft); }
+.opt.on.warn { color: var(--warn); background: var(--warn-soft); }
+.note { font-size: 14.5px; color: var(--ink); }
+.note .lbl { margin-right: 6px; }
+
+.levels td:first-child { font-weight: 700; white-space: nowrap; }
+.levels tr.on td { background: var(--pass-soft); }
+.levels tr.on td:first-child::after { content: " ✓"; color: var(--pass); }
+
+.eq td:first-child { width: 38%; }
+.eq .opts { margin-bottom: 6px; }
+
+.sens td:first-child { white-space: nowrap; }
+
+/* notes */
+ol.notes { padding-left: 20px; font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
+ol.notes a { overflow-wrap: anywhere; }
+sup a { text-decoration: none; font-size: 0.75em; }
+.cite { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; font-family: var(--font-mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  nav.toc { position: static; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); padding: 12px 14px; }
+  .wrap { padding-block: 24px 56px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <a class="back" href="https://openbenchmarkreview.org">← Open Benchmark Review</a>
+    <div class="eyebrow">Benchmark Review</div>
+    <h1>FrontierML</h1>
+    <dl class="meta">
+      <div><dt>Reviewed</dt><dd>Oct. 27, 2026</dd></div>
+      <div><dt>Benchmark creator</dt><dd>Induction Labs</dd></div>
+      <div><dt>Version reviewed</dt><dd>Repo <code>31837e0</code>; 21 tasks × 3 wallets; leaderboard of Oct. 27, 2026</dd></div>
+      <div><dt>Verdict</dt><dd><span class="verdict">Flawed</span></dd></div>
+    </dl>
+    <a class="howlink" href="https://epoch.ai/data/benchmark-reviews-documentation/methodology">How we review benchmarks (Epoch AI Rubric v1)</a>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="Contents">
+      <div class="eyebrow">Contents</div>
+      <ol>
+        <li><a href="#summary">Summary</a></li>
+        <li><a href="#methodology">Methodology</a></li>
+        <li><a href="#representative-errors">Representative Errors</a></li>
+        <li><a href="#errors">Errors</a></li>
+        <li><a href="#rubric">Rubric</a>
+          <ol>
+            <li><a href="#reviewability">1. Reviewability</a></li>
+            <li><a href="#scoring">2. Scoring</a></li>
+            <li><a href="#evaluation-quality">3. Evaluation Quality</a></li>
+            <li><a href="#research-vs-gaming">Research vs. Gaming</a></li>
+          </ol>
+        </li>
+        <li><a href="#disclaimer">Disclaimer</a></li>
+        <li><a href="#notes">Notes</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="summary" aria-label="Summary">
+        <p class="lede">FrontierML is an agentic benchmark of 21 ML tasks: training, distillation, quantization, serving, vision, audio, Lean proofs and games. Each model works for 12 hours in its developer's own harness, with internet access and a compute wallet of $10, $50 or $200, once per wallet. A held-out metric is scaled between a per-task floor and ceiling to 0–100. A Claude Opus 5.5 reviewer can zero trials that break the rules. The leaderboard reports the mean per wallet.<sup><a href="#n1">1</a></sup></p>
+        <p>FrontierML is unusually inspectable: its grading code, review rubrics, scoring anchors, trajectories and grade pages are all public. That openness is also its biggest problem. The "held-out" data for all 21 tasks is in a public, ungated Hugging Face dataset, and agents have internet access and a Hugging Face token. Seven of the 21 tasks (33%) have confirmed scoring defects. The review that enforces the rules was switched off for 21 of DeepSeek's trials, and those scores still count. We therefore designate the benchmark as Flawed.</p>
+        <p>The model ranking survives every correction we tried, and Opus 5.5 is #1 in 100% of task-bootstrap replicates. What the defects undermine is the score levels, and what several tasks actually measure.</p>
+        <div class="figures" role="list">
+          <div class="fig bad" role="listitem"><b>7 / 21</b><span>tasks with confirmed scoring defects</span></div>
+          <div class="fig bad" role="listitem"><b>21 / 21</b><span>tasks whose held-out data is public on Hugging Face</span></div>
+          <div class="fig" role="listitem"><b>38</b><span>leaderboard trials graded with review skipped</span></div>
+          <div class="fig" role="listitem"><b>1</b><span>run per model, task and wallet</span></div>
+        </div>
+      </section>
+
+      <section id="methodology" aria-label="Methodology">
+        <h2>Methodology</h2>
+        <p>FrontierML has fewer than 50 tasks, so we assessed all 21. For each task we read the following in the benchmark repository and tasks dataset, and compared them with the observed scores:<sup><a href="#n2">2</a></sup></p>
+        <ul>
+          <li>the prompt and the task contract</li>
+          <li>the grader, scoring anchors and judge</li>
+          <li>the held-out data, gates and self-check</li>
+          <li>the reference solution</li>
+        </ul>
+        <p>For six models (Opus 5.5, Fable 5.1, GPT-6 Astra, Gemini 4 Argon, Muse Wonder and DeepSeek V4.1 Flash), we read every trajectory and grade page, 378 trials in all. We classified each trial by what produced its score and checked its official outcome against the task rules. Leaderboard-wide statistics use all 1,197 trials from 19 models.</p>
+        <p>The published per-wallet means reproduce exactly from the trial table. Model reviewers made the per-trial calls. The lead auditor re-checked every confirmed false positive and every call that affects a winner. The central claims were re-verified against primary sources on Oct. 28: the dataset's visibility, the token injection, the review skip and the reviewer's view of the model name.<sup><a href="#n3">3</a></sup> A task counts toward the threshold only if a defect is confirmed and can change a score.</p>
+      </section>
+
+      <section id="representative-errors" aria-label="Representative errors">
+        <h2>Representative Errors</h2>
+        <ul class="errs">
+          <li><span class="term">Held-out answers readable from the web.</span> Every verifier downloads its held-out data from <code>&lt;task&gt;/private/</code> in <code>inductionlabs/frontier-ml-tasks</code>. That dataset is public and ungated, and was created on Sept. 24, before any audited run. Agents have internet access, and by default they receive the operator's own HF token (<code>harbor_plugin.py:521-526</code>). The only control is the reviewer: 10 of 21 rubrics forbid using the dataset, and the "searching up answers" check the methodology post describes appears in no rubric. DeepSeek <code>4ttc3o</code> cloned the benchmark repository, read the grader and the reference solution, and learned where the private split lives. It downloaded nothing and scored 0, and its review had been skipped.</li>
+          <li><span class="term">Selecting on the graded benchmark, scored as valid.</span> The prompt bans training, fine-tuning, calibrating "or selecting" on any public benchmark's test split. Graded GPQA-Diamond and LiveCodeBench files ship to the agent as development data. In <code>ternary-ptq</code>, the rubric omits "select", so it passed three Fable trials and one Argon trial that picked settings or checkpoints by GPQA accuracy. One is Fable <code>27dhfi</code>: "GPQA-Diamond first 40 questions: 4/40…", after which it changes its shipped defaults to match. In <code>llm-post-train</code>, the same behaviour was zeroed twice and passed once (Fable <code>2ikiw0</code>).</li>
+          <li><span class="term">A scorer that a blind constant beats.</span> In <code>screen-difference</code>, the floor is an empty output. An input-blind fixed paragraph scores 32.0, above 14 of the 18 audited trials. The judge scores recall only, although the prompt forbids unsupported claims.</li>
+          <li><span class="term">A rule that cannot decide its own winner.</span> In <code>llm-diffusion</code>, the review separates about 80 points from 0 on "genuine iterative denoising" without defining it. The $200 winner, Argon <code>v837u7</code>, ends each block with the causal verify pass that the reviewer cited when zeroing three other trials. The speed gate can be told apart by <code>max_tokens</code>, and Fable <code>19lyhu</code> served it a separate fast decoder.</li>
+          <li><span class="term">Floors that contradict the request or sit in the noise.</span> <code>maple-vlm</code>'s floor uses 8,192 sampled thinking tokens and a grammar, while graded requests send <code>max_tokens: 256</code> at temperature 0. The floor was also raised after half the field had run, and 54 of 57 trials score 0. <code>pokemon-random-battle</code>'s 50% floor is set against an opponent with about the candidate's compute. 41 of 57 trials score 0, and every wallet winner is within 1–2 standard errors.</li>
+          <li><span class="term">Rewarding recognition of the source.</span> In <code>ai-text-detection</code>, the held-out set is DetectRL-X's public test split, and its in-distribution train split is allowed. The 9 trials that trained on it average 92.0, against 65.3 for the rest.</li>
+        </ul>
+        <div><p><strong>Outside scoring defects:</strong></p>
+          <ul>
+            <li><strong>Review skipped.</strong> A run-wide switch, <code>FML_REVIEW_SKIP</code>, turned off review for 21 of DeepSeek's and 17 of MiniMax's trials (<code>grading.py:67</code>). They count on the leaderboard alongside reviewed trials.</li>
+            <li><strong>Provider quota.</strong> Gemini 4 Argon hit 332 <code>RESOURCE_EXHAUSTED</code> errors in 38 of 63 trials and worked a mean of 3.4 of 12 hours. 62 of its 63 trials are re-runs whose originals are unpublished.</li>
+            <li><strong>Reviewer told the model name.</strong> The Opus 5.5 reviewer is told which model it is reviewing. Claude models fail review less often (2.0% vs 6.1%, p = 0.004), but the per-trial audit found no self-preference: Opus trials had no missed violations, and the reviewer's misses favoured Fable and Argon.</li>
+            <li><strong>Unpublished harnesses.</strong> Only Claude Code's settings are published. The Codex, Antigravity and Muse Code wrappers resume after failed commands; Claude Code exits when the model ends its turn.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="errors" aria-label="Errors">
+        <h2>Errors</h2>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Task</th><th>Error type</th><th>Evidence</th></tr></thead>
+            <tbody>
+              <tr><td><code>ternary-ptq</code></td><td><span class="type t-fp">False Positive</span></td><td>4 trials select on graded GPQA; rubric omits "select" (<code>review.py:14-23</code>)</td></tr>
+              <tr><td><code>llm-post-train</code></td><td><span class="type t-fp">False Positive</span></td><td>Fable <code>2ikiw0</code> passed; same behaviour zeroed twice</td></tr>
+              <tr><td><code>screen-difference</code></td><td><span class="type t-fp">False Positive</span></td><td>Blind fixed paragraph scores 32.0, above 14 of 18 trials</td></tr>
+              <tr><td><code>llm-diffusion</code></td><td><span class="type t-imp">Impossible</span> <span class="type t-fp">False Positive</span></td><td>Undefined deciding rule; speed gate recognisable by <code>max_tokens</code></td></tr>
+              <tr><td><code>maple-vlm</code></td><td><span class="type t-fn">False Negative</span> <span class="type t-imp">Construct</span></td><td>Floor recipe contradicts the graded request; 54/57 at 0</td></tr>
+              <tr><td><code>pokemon-random-battle</code></td><td><span class="type t-fn">False Negative</span></td><td>Uncalibrated floor; winners within 1–2 SE</td></tr>
+              <tr><td><code>ai-text-detection</code></td><td><span class="type t-imp">Construct</span></td><td>Recognising the public source is worth ~27 points</td></tr>
+              <tr><td><em>all 21 tasks</em></td><td><span class="type t-fp">False Positive risk</span></td><td>Held-out data public on HF; agents have internet and an HF token</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tally"><p>Total: <b>7</b> of <b>21</b> tasks (<b>33%</b>). The Flawed threshold is 20%.</p>
+          <ul>
+            <li>Excluding the noise and construct calls (pokemon and ai-text-detection), it is 5 of 21 (24%).</li>
+            <li>Counting only tasks with a confirmed trial-level false positive, it is 2 of 21 (10%). On that count the verdict rests on the second trigger: held-out answers for every task are readable from the web by agents with internet access, and the only control is a review that is incomplete and can be switched off.</li>
+          </ul>
+        </div>
+
+        <h3>Sensitivity of the leaderboard</h3>
+        <p>Correcting the confirmed defects leaves the model order intact at every wallet.</p>
+        <div class="tbl">
+          <table class="sens">
+            <thead><tr><th>Scenario ($200)</th><th class="num">Opus</th><th class="num">Astra</th><th class="num">Fable</th><th class="num">Argon</th><th class="num">DeepSeek</th><th class="num">Muse</th></tr></thead>
+            <tbody>
+              <tr><td>Published mean</td><td class="num">1 (58.8)</td><td class="num">2 (44.5)</td><td class="num">3 (41.9)</td><td class="num">4 (39.5)</td><td class="num">5 (23.5)</td><td class="num">6 (19.3)</td></tr>
+              <tr><td>Zero the 5 confirmed false positives</td><td class="num">1</td><td class="num">2</td><td class="num">3 (40.5)</td><td class="num">4</td><td class="num">5</td><td class="num">6</td></tr>
+              <tr><td>Strict reading (also probable false positives and the contested winner)</td><td class="num">1</td><td class="num">2</td><td class="num">3 (40.5)</td><td class="num">4 (32.3)</td><td class="num">5</td><td class="num">6</td></tr>
+              <tr><td>Leave one task out (21 variants)</td><td class="num">1</td><td class="num">2</td><td class="num">3*</td><td class="num">4</td><td class="num">5</td><td class="num">6</td></tr>
+              <tr><td>Task bootstrap: share at this rank</td><td class="num">100%</td><td class="num">63%</td><td class="num">49%</td><td class="num">64%</td><td class="num">90%</td><td class="num">91%</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">* Without llm-post-train, Fable passes Astra. Astra, Fable and Argon are within 5 points of each other at $200.</p>
+      </section>
+
+      <section id="rubric" aria-label="Rubric">
+        <h2>Rubric</h2>
+
+        <h3 id="reviewability">1. Reviewability</h3>
+        <div class="tbl">
+          <table class="levels">
+            <thead><tr><th>Level</th><th>Meaning</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr class="on"><td>Full</td><td>All tasks and scoring logic inspectable, and harness/API settings for each model (reasoning effort, token and time limits, tool access, system prompts) fully disclosed</td><td>[proceed to 2]</td></tr>
+              <tr><td>Partial</td><td>A representative sample of tasks and scoring logic inspectable, with full harness/API settings disclosed</td><td>[proceed to 2]</td></tr>
+              <tr><td>Inadequate</td><td>Limited, biased or no inspectable tasks or scoring logic; harness/API settings undisclosed</td><td>[stop → NEI]</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note"><span class="lbl">Notes</span>Grading code, rubrics, anchors, judge prompts, held-out data, trajectories and grade pages are all public. Not public:</p>
+        <ul class="note">
+          <li>submitted files, visible only as quoted in trajectories</li>
+          <li>a zeroed trial's pre-review score</li>
+          <li>the Codex, Antigravity and Muse Code wrappers, whose settings can be read from the trajectories</li>
+          <li>the originals of 72 re-run trials</li>
+        </ul>
+
+        <h3 id="scoring">2. Scoring</h3>
+        <p>This is the minimum standard required to be Verified; failing any of these items results in a Flawed verdict.</p>
+
+        <div class="rub">
+          <h4>Scoring</h4>
+          <div><span class="lbl">Examples</span>
+            <ul>
+              <li>Essentially impossible to answer correctly as written (underspecified task, hidden requirement, missing file or tool)</li>
+              <li>False negative (overly strict scorer, stale ground truth, sandbox failure independent of the agent)</li>
+              <li>False positive (lax scorer, reward-hackable environment, shortcut that bypasses the stated skill, answer readable from the web)</li>
+              <li>Task egregiously doesn't measure the claimed capability</li>
+            </ul>
+          </div>
+          <div><span class="lbl">Default threshold for Flawed</span> Errors affect ≥20% of the total score in the inspected sample, or an issue corrupts grading at scale</div>
+          <div class="opts" aria-label="Status"><span class="opt">Pass</span><span class="opt on flag">Flag [stop → Flawed]</span><span class="opt">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>7 of 21 tasks (33%) are affected, and held-out data is readable from the web for every task; see Errors.</div>
+        </div>
+
+        <div class="rub">
+          <h4>Benchmark Consistency</h4>
+          <div><span class="lbl">Examples</span> Scorer, instructions or ground truth changed without a version bump</div>
+          <div><span class="lbl">Default threshold for Flawed</span> Leaderboard has incomparable results from different versions</div>
+          <div class="opts" aria-label="Status"><span class="opt">Pass</span><span class="opt on flag">Flag [stop → Flawed]</span><span class="opt">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>The leaderboard mixes reviewed and unreviewed scores. 38 trials were graded without the review that zeroes rule violations elsewhere, and two of them are probable false positives. Three further issues:</div>
+          <ul class="note">
+            <li><code>maple-vlm</code>'s floor was raised on Oct. 7, after half the field had run. All trials were rescored on the new floor.</li>
+            <li>72 re-runs have unpublished originals.</li>
+            <li>One Opus trial received an older prompt.</li>
+          </ul>
+        </div>
+
+        <div class="rub">
+          <h4>Elicitation</h4>
+          <div><span class="lbl">Examples</span> Under-resourced relative to task size; poor context management; no agentic environment where one would be natural; excessive non-voluntary termination</div>
+          <div><span class="lbl">Default threshold for Flawed</span> Substantially reduced performance compared to reasonable alternatives</div>
+          <div class="opts" aria-label="Status"><span class="opt on pass">Pass</span><span class="opt">Flag [stop → Flawed]</span><span class="opt">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>Models work for 12 hours in vendor harnesses with internet access. The caveat is Gemini 4 Argon, which was throttled by a provider quota in 38 of 63 trials and averaged 3.4 of 12 hours. That plausibly deflates its scores, but the size of the effect cannot be measured.</div>
+        </div>
+
+        <div class="rub">
+          <h4>Bias in Evaluation Setup</h4>
+          <div><span class="lbl">Examples</span> Uneven compute or token budgets; unfair scaffold choice</div>
+          <div><span class="lbl">Default threshold for Flawed</span> Material model-specific advantage found</div>
+          <div class="opts" aria-label="Status"><span class="opt on pass">Pass</span><span class="opt">Flag [stop → Flawed]</span><span class="opt">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>All models get the same budgets, and the model-specific harnesses are disclosed. The reviewer is an Opus model that is told the model name; Claude models fail review less often, but we found no self-preference trial by trial. Several tasks are judged by OpenAI models that agents may also query.</div>
+        </div>
+
+        <h3 id="evaluation-quality">3. Evaluation Quality</h3>
+        <p>This is the standard we would like all benchmarks to meet, but it is not necessarily disqualifying to omit or fail these items.</p>
+        <div class="tbl">
+          <table class="eq">
+            <thead><tr><th>Question</th><th>Status and notes</th></tr></thead>
+            <tbody>
+              <tr><td>Elicitation and resource adequacy: are the resources given to models sufficient for them to perform near their ceiling?</td><td><div class="opts"><span class="opt on pass">Sufficient</span><span class="opt">Constraining</span><span class="opt">Unreasonably constraining</span><span class="opt">Unknown</span></div>Constraining for Gemini 4 Argon, because of the provider quota. On 8 of 21 tasks a larger wallet buys the strongest models nothing.</td></tr>
+              <tr><td>Scaffold fairness: what scaffold does the leaderboard report?</td><td><div class="opts"><span class="opt">Shared common scaffold</span><span class="opt">Mix</span><span class="opt on neutral">Model-specific scaffolds</span></div>Only Claude Code's settings are published.</td></tr>
+              <tr><td>Is there evidence or risk of contamination?</td><td>100% of the held-out data has been public on Hugging Face since Sept. 24, and the grader and repository since Oct. 13. The benchmark is contaminated for every future run.</td></tr>
+              <tr><td>Has human completability been assessed?</td><td><div class="opts"><span class="opt">All tasks</span><span class="opt">Representative set</span><span class="opt">Poor implementation</span><span class="opt on warn">Not established</span></div>No task ships a working reference solution: all 21 <code>solution/</code> folders hold the same smoke server. The blog's "Human Researcher" line is undocumented.</td></tr>
+              <tr><td>Score range</td><td>Per-task floor and ceiling, clamped to [0, 100]. The floors decide a lot: maple-vlm has 54 of 57 trials at 0, pokemon 41 of 57 and svg 40 of 57.</td></tr>
+              <tr><td>Statistical adequacy: how many runs per model (≥ 5 recommended for error bars)?</td><td><b>1 run per model, task and wallet.</b> Near-replicate pairs differ by a median of 5.2 points, and several wallet winners are within noise.</td></tr>
+              <tr><td>Construct validity</td><td><div class="opts"><span class="opt">Measures stated capabilities</span><span class="opt on warn">Partially measures stated capabilities</span><span class="opt">Does not measure stated capabilities</span></div>Realistic, open-ended tasks, but several reward identifying the evaluation source. Data-efficient pretraining rewards a recalled public recipe.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="research-vs-gaming">Extension: Research vs. Gaming</h3>
+        <p>Rubric v1 does not ask whether high scores reflect research progress. We classified each of the 378 audited trials by what actually produced its score.<sup><a href="#n4">4</a></sup></p>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Model</th><th class="num">Research</th><th class="num">Engineering</th><th class="num">Grey area</th><th class="num">Reward hack</th><th class="num">No gain</th></tr></thead>
+            <tbody>
+              <tr><td>Claude Opus 5.5</td><td class="num">2</td><td class="num">53</td><td class="num">5</td><td class="num">0</td><td class="num">3</td></tr>
+              <tr><td>GPT-6 Astra</td><td class="num">0</td><td class="num">51</td><td class="num">3</td><td class="num">1</td><td class="num">8</td></tr>
+              <tr><td>Claude Fable 5.1</td><td class="num">0</td><td class="num">45</td><td class="num">5</td><td class="num">8</td><td class="num">5</td></tr>
+              <tr><td>Gemini 4 Argon</td><td class="num">0</td><td class="num">45</td><td class="num">6</td><td class="num">3</td><td class="num">9</td></tr>
+              <tr><td>DeepSeek V4.1 Flash</td><td class="num">0</td><td class="num">40</td><td class="num">4</td><td class="num">0</td><td class="num">19</td></tr>
+              <tr><td>Muse Wonder</td><td class="num">0</td><td class="num">37</td><td class="num">0</td><td class="num">1</td><td class="num">25</td></tr>
+              <tr><td><b>All audited trials</b></td><td class="num"><b>2 (1%)</b></td><td class="num"><b>271 (72%)</b></td><td class="num"><b>23 (6%)</b></td><td class="num"><b>13 (3%)</b></td><td class="num"><b>69 (18%)</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>No trial was judged plausibly novel. What wins is the standard recipe done carefully: fine-tune or distil the strongest allowed public model and serve it efficiently. Opus wins 13 of 21 tasks at every wallet by executing that recipe across more tasks. Rule-breaking is concentrated in Fable, with 8 trials, mostly selecting on public benchmark files. Sources were mostly found by investigation rather than recall. The exception is data-efficient pretraining, which rewards a recalled public recipe: every trial that wrote the Muon optimizer from memory averages 65.8, against 27.4 for the rest.</p>
+      </section>
+
+      <section id="disclaimer" aria-label="Disclaimer">
+        <h2>Disclaimer</h2>
+        <p>This is a full review of all 21 tasks and of six models' 378 trials. The other 13 models were used only for leaderboard-wide statistics. Model reviewers made the per-trial calls from trajectories and grade pages, and every counted defect was re-checked by hand. A zeroed trial's pre-review score is unpublished, so false negatives cannot be restored in the ranking. The dataset is public now; its visibility during the runs is unknown.</p>
+        <p>This review uses the format and rubric of Epoch AI's Benchmark Reviews. It is an independent review and is not produced or endorsed by Epoch AI.</p>
+      </section>
+
+      <section id="notes" aria-label="Notes">
+        <h2>Notes</h2>
+        <ol class="notes">
+          <li id="n1">Leaderboard and methodology: <a href="https://www.frontierml.org/data/">frontierml.org/data</a>, <a href="https://www.frontierml.org/blog/">frontierml.org/blog</a> (Oct. 13, 2026).</li>
+          <li id="n2">Repository: <a href="https://github.com/induction-labs/frontier-ml">github.com/induction-labs/frontier-ml</a> at <code>31837e0</code> ("Initial benchmark release", Oct. 13, 2026). Tasks dataset: <a href="https://huggingface.co/datasets/inductionlabs/frontier-ml-tasks">huggingface.co/datasets/inductionlabs/frontier-ml-tasks</a> at <code>925401fb</code>.</li>
+          <li id="n3">Hugging Face API, Oct. 28, 2026: <code>private: false</code>, <code>gated: false</code>, created 2026-09-24, 7,660 files under <code>&lt;task&gt;/private/</code> for all 21 tasks. Code: <code>frontier_ml/harbor_plugin.py:521-526</code> (<code>FML_AGENT_HF_TOKEN</code>, else the operator's <code>HF_TOKEN</code>); <code>frontier_ml/grading.py:67</code> (<code>FML_REVIEW_SKIP</code>); <code>frontier_ml/review_trajectory.py:154</code> (the reviewer sees the agent's <code>model_name</code>).</li>
+          <li id="n4">Per-trial reviews, the adjudication, the task log, the setup audit, the full findings and the scripts are in <a href="https://github.com/Open-Benchmark-Review/audits/tree/main/audits/frontierml">audits/frontierml</a>.</li>
+        </ol>
+        <h3>Cite</h3>
+        <div class="cite">Open Benchmark Review (2026), "FrontierML: Benchmark Review". Reviewed Oct. 27, 2026. github.com/Open-Benchmark-Review/audits</div>
+      </section>
+
+      <footer>Rubric: Epoch AI Benchmark Reviews, Rubric v1. Verdict categories: Verified, Flawed, Not enough information.</footer>
+    </main>
+  </div>
+</div>

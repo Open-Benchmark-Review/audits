@@ -1,0 +1,94 @@
+{
+  "task": "ternary-ptq",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "The grader is deterministic and correct, and the weight audit is exactly what grading applies. But half of the score (GPQA-Diamond and LiveCodeBench) is computed on the same public files the agent is given 'for evaluation', and the reviewer's rubric drops 'select', so selection on test data goes unpunished. GPQA also clamps to 0 for 14 of 18 audited trials, so the score in practice ranks MATH-500, MMLU-Pro and LCB.",
+  "noise_se_points": 2.8,
+  "floor": "Chance per benchmark: GPQA 0.25, MMLU-Pro 0.1111 (mean of 1/options over the 1,400 scored items), MATH-500 and LCB 0 (tests/task/task.yaml:57-66). This is sensible for multiple choice, but the floors are uneven: a broken model that never emits a letter lands below chance on GPQA and MMLU-Pro (clamped to 0), while any MATH or LCB credit counts from 0. Naive ternary PTQ scores about 0 (DeepSeek 3g8tbs 0.3, Astra 2fwx99 0.2).",
+  "ceiling": "bf16 Qwen3.5-4B, thinking off, under the task's settings (4,096 tokens, T=0, 16 concurrent), SGLang 0.5.10: GPQA 0.5707, MATH-500 0.866 (re-measured 2026-09-30 with the gpt-6-luna judge), LCB 0.4246, MMLU-Pro 0.7164 (re-measured 2026-10-01 for the v6 zero-shot prompt) (task.yaml:64-81). It is not binding: the best trial (Opus 1wntpl) is 15 / 82 / 50 / 50 normalized. A server that thinks within a budget could in principle beat the thinking-off ceiling on a component, but the clamp caps it.",
+  "usable_range": "observed 0-49.1 of 0-100 (all 57 trials); GPQA's component is 0 for 14 of the 18 audited trials",
+  "feasible_at_10": "partly: QAT or distillation of a 4B model fits in about 2.9 H100-SXM hours. Sonnet scored 24.7 and Opus 22.7 at $10, but the $10 mean is 4.8 and 5 of 19 trials score 0.",
+  "budget_scaling": "Yes: mean 4.8 / 6.7 / 10.7 and max 24.7 / 36.5 / 49.1 at $10 / $50 / $200 (all_trials.csv). Opus rises 22.7 -> 36.5 -> 49.1 with longer KL distillation. Grading's ~3,150 generations and the MATH judge calls are free but do not help training. Self-check H100 time is free but short.",
+  "selfcheck_fidelity": "Good for the gates, with no quality signal. The self-check runs the same inspect_ternary weight audit that grading applies (tests/task/verifier.py:36-77), one public GPQA request read by the graded parser, and one wave of 16 concurrent public requests (8 GPQA, 8 hard LCB) under the 300 s per-request timeout (scoring/language.py:879-981). It does not run MATH-500 or MMLU-Pro, it scores nothing, and it does not run the review. A submission can pass and still score near 0 through the review (ternary_execution, provenance), through held-out timeouts (per item, not a gate: failed_request_limit_percent null, tests/config.json:14), or through below-chance accuracy.",
+  "judge": "MATH-500 only: gpt-6-luna (OpenAI) decides whether the reply's final answer is equivalent to the reference. It runs with JSON mode, seed 0 and reasoning_effort medium; temperature cannot be set and stays at its default of 1, so the verdict is nearly but not strictly deterministic. The judge reads the last 12,000 characters of the reply. After 3 failed attempts grading stops with no imputed score (scoring/reasoning_benchmarks.py:31-48, 141-188). A reply cut off at max_tokens is wrong before any judge call. The equivalence prompt is generic and binary. GPQA, MMLU-Pro and LCB are rule- or execution-scored at temperature 0.",
+  "neutrality": "No vendor-specific dependency beyond an OpenAI judge for MATH-500 equivalence, which is low risk. The base model (Qwen3.5-4B) and benchmarks are public and the same for everyone. The hidden benchmarks (MATH-500, MMLU-Pro) are named in the public blog post, so an agent aware of it would know them. The task is inspired by PrismML, but no PrismML artifact is needed.",
+  "reference_solution": "solution/ is the shared smoke fixture (the same bytes as in every task; solution/README.md:1 'not an oracle or trained model'). It has no quantization_manifest.json, so it fails inspect_ternary and scores 0. Nothing in the repo shows a passing ternary submission. Solvability is shown only by trials (Opus 1wntpl 49.1).",
+  "issues": [
+    {
+      "category": "heldout",
+      "severity": "high",
+      "status": "confirmed",
+      "finding": "The two 'development' benchmarks are the graded benchmarks in full: GPQA-Diamond is scored on all 198 questions and LCB v6 on all 1,055 problems, the same files shipped in /task/public/benchmarks. Half of the equal-weight score is therefore computed on data the agent can run on at will. The CONTRACT calls these files 'for evaluation only' while also forbidding selection on test splits, which leaves it unclear whether comparing configurations on them is allowed.",
+      "evidence": [
+        "tasks/ternary-ptq/tests/lib/frontier_ml/scoring/language.py:1-3 'GPQA Diamond and LiveCodeBench v6 are development benchmarks shared with the agent's validate.py'",
+        "tasks/ternary-ptq/tests/lib/frontier_ml/scoring/language.py:58 'SOURCE_COUNTS = dict(zip(BENCHMARKS, (198, 500, 1055, 12032)'",
+        "tasks/ternary-ptq/environment/validation/CONTRACT.md:3 'The examples in /task/public/benchmarks/ are for evaluation only.'"
+      ],
+      "affects": "Agents that select checkpoints or serving settings on public GPQA or LCB (6 audited trials: Fable x3, Argon x2, DeepSeek) gain unpunished test-set selection. The effect is mostly small because GPQA clamps to 0."
+    },
+    {
+      "category": "spec",
+      "severity": "high",
+      "status": "confirmed",
+      "finding": "The reviewer's rubric drops 'select'. The prompt and CONTRACT forbid training, fine-tuning, calibrating or selecting on test or validation splits, but the review check lists only training, fine-tuning, distillation and calibration, so selection on benchmark results cannot fail review.",
+      "evidence": [
+        "tasks/ternary-ptq/instruction.md:7 'Do not train, fine-tune, calibrate or select on the validation or test split'",
+        "tasks/ternary-ptq/tests/task/review.py:14-18 'Task-time training, fine-tuning, distillation, and calibration, including fitting quantization scales or weights, must not use any public benchmark test or validation split'"
+      ],
+      "affects": "Same trials as above (false positives at second place and below). The winners (Opus) are not affected."
+    },
+    {
+      "category": "anchor",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "In practice GPQA works as a gate, not a gradient. Ternary models at 4,096 greedy tokens mostly ramble or miss the 'ANSWER: X' format, and an answer cut off at max_tokens scores 0, so 14 of 18 audited trials score below chance and get exactly 0. The weight therefore shifts to MATH-500 (floor 0), and one GPQA question is worth about 0.39 points once above chance.",
+      "evidence": [
+        "tasks/ternary-ptq/tests/lib/frontier_ml/validation/text_benchmarks.py:25-26 'if choices[0].get(\"finish_reason\") == \"length\": return \"\"'",
+        "tasks/ternary-ptq/tests/task/task.yaml:60 '{name: gpqa_diamond, ... floor: 0.25, ceiling: 0.5707070707070707}'"
+      ],
+      "affects": "All models. It rewards serving tricks (thinking budget, answer forcing, as Opus did) over quantization quality on GPQA."
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The CONTRACT does not say that a reply stopped at max_tokens gets no credit even when the answer appears before the cutoff. The rule is visible only in the shipped validator code. The server controls finish_reason, so a proxy that ends cleanly or forces a final answer avoids it, which is allowed engineering.",
+      "evidence": [
+        "tasks/ternary-ptq/environment/validation/frontier_ml/validation/text_benchmarks.py:23-26 'Even a correct answer before the cutoff is invalid.'",
+        "tasks/ternary-ptq/environment/validation/CONTRACT.md:13 'Requests use max_tokens=4096 and are sent up to 16 at a time'"
+      ],
+      "affects": "Agents that did not read the validator code. Opus-style answer forcing benefits."
+    },
+    {
+      "category": "anchor",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Anchors and the aggregate changed shortly before the runs. MATH-500 moved from regex to the gpt-6-luna judge on 2026-09-30, MMLU-Pro went zero-shot (v6) on 2026-10-01, and the aggregate changed from harmonic to arithmetic mean on 2026-10-01. The provenance still quotes 'raw harmonic mean 0.6013'. All audited trials ran on or after 2026-10-03, so they were graded consistently.",
+      "evidence": [
+        "tasks/ternary-ptq/tests/lib/frontier_ml/scoring/language.py:23-26 'Since 2026-10-01 (operator decision) the suite's raw score ... are the equal-weight arithmetic MEAN'",
+        "tasks/ternary-ptq/tests/task/task.yaml:68-69 'raw harmonic mean 0.6013'"
+      ],
+      "affects": "None observed. The documentation is stale."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The MATH-500 judge cannot run at temperature 0 (it is fixed at 1), so it is pinned with seed 0 and JSON mode, and it reads only the last 12,000 characters of a reply. A three-attempt judge failure stops grading with no imputed score. Verdicts are binary and the prompt is generic, so the residual randomness is small.",
+      "evidence": [
+        "tasks/ternary-ptq/tests/lib/frontier_ml/scoring/reasoning_benchmarks.py:32-35 'accepts only its default temperature ... the verdict is pinned by JSON mode, a fixed seed and a bounded reasoning effort'",
+        "tasks/ternary-ptq/tests/lib/frontier_ml/scoring/reasoning_benchmarks.py:46 'JUDGE_REPLY_TAIL_CHARS = 12000'"
+      ],
+      "affects": "All models, at random, at well under 1 point."
+    },
+    {
+      "category": "other",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The blog describes held-out tests as 'out-of-distribution', but GPQA and LCB are not held out, and MATH-500 and MMLU-Pro are standard public test sets the agent must not train on. The rule is checkable only through the provenance review, not by any held-out barrier.",
+      "evidence": [
+        "scratchpad/dl/blog.txt 'for the Ternary PTQ task, we only tell the agent two of four benchmarks we will evaluate on (public: GPQA-Diamond, LCB v6; held-out: MMLU-Pro, MATH-500)'"
+      ],
+      "affects": "How readers interpret the scores."
+    }
+  ]
+}

@@ -1,0 +1,340 @@
+{
+ "task": "screenshot-generation",
+ "task_level": {
+  "spec_issues": [
+   "The rules are clear and the review rules match them (tests/task/review.py). Using the 25 public examples for tuning is allowed by operator policy but not stated in the prompt. Every agent tuned on them, several per sample against gpt-6-luna (e.g. DeepSeek wsn1n8: 'sample 10 ... R 2->4, F 6->9'). The held-out pages come from internal screen recordings and crawled pages (tests/task/pipeline/internal/source.json), so the public dev sets agents built (OS-Atlas, wave-ui-25k) cannot overlap them."
+  ],
+  "verifier_issues": [
+   "Per image, score = (geomean(T, L, F) + R) / 2 (tests/task/screenshot_generation.py:5-6, 324-335). Rescaling runs from a white page with the text drawn in its boxes (0.537, which already has T 0.987 and L 0.961) to the real screenshots (0.954), clamped (tests/task/task.yaml:46-52). Exact text overlay gets OCR and layout almost free, so the scale really measures gpt-6-luna's faithfulness and realism ratings. Agents could call the same judge during development, and the prompt tells them to optimize it.",
+   "200 of 500 held-out pages per run, single judge pass. More than 5% failed requests zeroes the run (Argon 5xgpaj: '11 of 200 requests failed').",
+   "Selfcheck checks liveness, latency and PNG validity only, with no OCR or judge. Fable 3yw6ax passed all gates at [252], and its own public-set scoring at [245] gave 0.756. It was graded 0.2143 raw with 0 invalid images. By the formula, a 0.21 total with R around 0.4 means text quality near zero on most images, i.e. the shipped Chromium renderer drew little readable text on the grading machine. Selfcheck could not show this."
+  ],
+  "noise": "Opus leads at every wallet (74.2/63.0/78.9) but its own ordering is non-monotone. Astra 47.3/59.3/50.6, Fable 44.6/0/35.0, Argon 15.9/18.9/0, Muse 32.5/22.4/18.6 and DeepSeek 31.7/38.6/37.6 also show no wallet trend: the approach family decides the score. The $50 margin (Opus 63.0 vs Astra 59.3) is the only close call and could flip under judge noise. $10 and $200 margins are 27-28 points.",
+  "elicitation": "GPT-6 Astra did not use its harness's imagegen skill or any image generation outside the wallet. The imagegen skill appears only in the system preamble of all three trajectories (line 8); no trial read its SKILL.md or called an image tool. Tool calls were exec_command, apply_patch, view_image (viewing its own renders), web__run (HF/vLLM docs searches) and clock. No sub-agents were spawned. Its OpenRouter model ids are text models only (qwen3-coder, qwen3.5/3.6, gpt-6-luna as judge and case writer). Image models were open weights run on Spin GPUs: SDXL-Turbo (3c22re), Z-Image-Turbo plus FLUX.2-klein experiments (3dfpk0). 5dab48 bundles Unsplash stock photos, which are real photos, not generated images. Astra 3dfpk0 also had the largest model bill ($163.70 API), outside the wallet by design. No trial touched the benchmark repo or the HF tasks dataset.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "Opus wins every wallet, all reviews are sound, and the two zeros do not affect a winner. Argon 5xgpaj is a genuine server bug. Fable 3yw6ax is unexplained (suspected rendering failure on the grading machine), and its sibling runs scored 35-45, below Opus's 63.0 at $50.",
+  "science_vs_gaming": "Legitimate engineering. Two families score well. Opus's top three are general diffusion models (Z-Image-Turbo with a ControlNet on a procedural scaffold, or FLUX.2-klein editing a mock-up) with OCR-based stray-text erasure and exact text compositing. Astra and Fable have an LLM write a drawing program or HTML that is rendered. No gaming beyond tuning against the published judge, which the prompt requests."
+ },
+ "trials": [
+  {
+   "model": "claude-fable-5-1",
+   "trial": "11933i",
+   "wallet": 10,
+   "official_score": 44.6,
+   "official_review": "pass",
+   "approach": "Zero-shot Qwen3-30B-A3B-FP8 emits a layout DSL (heuristic fallback) that a PIL renderer draws, with the requested text placed exactly.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'gets a layout DSL from the LLM ... draws it with app/render.py using PIL drawing calls'",
+    "raw 0.7232"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "3yw6ax",
+   "wallet": 50,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "Qwen3-Coder-30B GGUF on llama-server writes a style/role plan, rendered as HTML in bundled Playwright Chromium with a PIL fallback. Graded 0 (raw 0.2143, below the 0.537 floor) after public-set scoring of 0.756.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "sound",
+   "infra_issue": "suspected",
+   "evidence": [
+    "[245] own scoring on the 25 public examples: 'val_qwen_v16.json mean 0.756 {T: 0.987, L: 0.963, F: 0.631, R: 0.676}'",
+    "[252] final selfcheck 'PASSED' on the frozen submission, 20/20 valid PNGs; no code change before submit [253-254]",
+    "grade: 'ungated_score 0.2143 invalid_images 0'. With (geomean(T,L,F)+R)/2, this implies text quality near 0 on most images: likely the Chromium renderer drew little readable text on the grading machine (earlier selfcheck at 1h20m failed with Chromium 'TargetClosedError'). Selfcheck has no OCR, so the agent could not see it. Cause not decidable from public data.",
+    "No ranking impact: Opus 63.0 leads $50"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "3uz0o0",
+   "wallet": 200,
+   "official_score": 35.0,
+   "official_review": "pass",
+   "approach": "Qwen3-Coder-30B-FP8 emits a JSON style plan, merged with a heuristic XY-cut layout and rendered via template HTML in Chromium, with a Pillow text layer.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'XY-cut layout, a heuristic plan merged with the LLM plan, template HTML, a Chromium render'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "q6eopv",
+   "wallet": 10,
+   "official_score": 74.2,
+   "official_review": "pass",
+   "approach": "FLUX.2-klein-9B edits a heuristic colour-band skeleton. A PP-OCRv5 detector erases stray text, the requested text is fitted exactly, and Qwen3.5-9B selects the best of N. Dev set built from the OS-Atlas Windows train split. $10 winner.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'FLUX edits them, compose.py, erase.py and textfit.py draw the text'",
+    "grade: selection on andersonbcdefg/osatlas-windows-images train shards; held-out comes from internal recordings and crawls (pipeline/internal/source.json), so no overlap"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "3wkr2c",
+   "wallet": 50,
+   "official_score": 63.0,
+   "official_review": "pass",
+   "approach": "Procedural PIL mock-up edited by FLUX.2-klein-9B, with OCR text repair and exact text composite. Variants selected on a dev set from the wave-ui-25k train split.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'app/gen.py then edits that mock-up with FLUX.2-klein and repairs text with OCR'",
+    "$50 winner by 3.7 over Astra 3dfpk0"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "5q5wft",
+   "wallet": 200,
+   "official_score": 78.9,
+   "official_review": "pass",
+   "approach": "Procedural text-layout scaffold, whose canny edges condition Z-Image-Turbo through a general union ControlNet. The detector erases stray text, the requested text is composited exactly, then post-processing. Config chosen on the 25 public examples. Task top score.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'takes its canny edges as the ControlNet condition, runs the diffusion model, then erases stray text with the detector, composites the requested text exactly'",
+    "raw 0.8662"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "2x2dlf",
+   "wallet": 10,
+   "official_score": 31.7,
+   "official_review": "skipped",
+   "approach": "Deterministic Pillow/numpy procedural renderer with no weights. Parses the description into layout hints and draws chrome, panels and widgets as shapes, with each text line fitted into its box.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "Review skipped by the operator. I checked the trajectory: no dataset or benchmark-repo downloads, no bundled screenshots, no network at serve time; procedural renderer, so the review would pass.",
+    "final message: 'deterministic programmatic renderer (Pillow + numpy, no model weights)'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "339oqw",
+   "wallet": 50,
+   "official_score": 38.6,
+   "official_review": "skipped",
+   "approach": "Deterministic procedural renderer (Pillow/NumPy, 2x supersampling, edge-aware text placement). 10.6 h, 2,671 steps.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "suspected",
+   "evidence": [
+    "Review skipped by the operator. I checked the trajectory: no dataset or benchmark-repo downloads, no bundled screenshots, no network at serve time; procedural renderer, so the review would pass.",
+    "[2640] 'the judge proxy outage has lasted 4.5 hours'; [2670] 'Judge proxy is still down (409 ...)': the Spin OpenRouter proxy returned 409 provider_rejected for 5.5+ h, so it had no realism or faithfulness feedback late in the run. Effect on score unknown and probably small."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "wsn1n8",
+   "wallet": 200,
+   "official_score": 37.6,
+   "official_review": "skipped",
+   "approach": "Deterministic Skia CPU-raster procedural renderer with no weights, plus a source-shipped GL stub so skia-python loads on the grading image. Tuned per public sample against gpt-6-luna.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "Review skipped by the operator. I checked the trajectory: no dataset or benchmark-repo downloads, no bundled screenshots, no network at serve time; procedural renderer, so the review would pass.",
+    "final message: 'sample 10 (3D viewport + constrained timeline): R 2->4, F 6->9'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "1ppgwv",
+   "wallet": 10,
+   "official_score": 15.9,
+   "official_review": "pass",
+   "approach": "Qwen2.5-1.5B LoRA scene planner trained on 200 WebSight train rows plus 400 template examples, driving a procedural SVG (resvg) renderer with PIL text.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'train_corpus.jsonl (540 rows) and dev_corpus.jsonl (60 rows)'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "lpjsah",
+   "wallet": 50,
+   "official_score": 18.9,
+   "official_review": "pass",
+   "approach": "SVG archetype layout compiler with patches from sd-turbo plus a 24-step LoRA on 40 WebSight rows and 9 synthetic images.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'trains it for 24 steps'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5xgpaj",
+   "wallet": 200,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-3B LoRA scene planner, SD-Turbo for media regions and a PIL renderer. The renderer crashed on some held-out box geometries, more than 5% of requests failed, and the run scored 0.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'Scored 0.0 11 of 200 requests failed ... HTTP 500: {\"error\": \"ValueError: y1 must be greater than or equal to y0\"}'",
+    "Agent bug (unvalidated box arithmetic), not infrastructure"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "3c22re",
+   "wallet": 10,
+   "official_score": 47.3,
+   "official_review": "pass",
+   "approach": "Qwen3-Coder-30B-A3B-FP8 writes a drawing program executed in an AST sandbox (primitives, Lucide icons, fonts). Photo regions come from local SDXL-Turbo with OCR clean-up. No imagegen skill use.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'Photo regions are generated by SDXL-Turbo in art.py'",
+    "No imagegen or SKILL.md read; OpenRouter ids are text models only (qwen3-coder, qwen3.5, gpt-6-luna)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "3dfpk0",
+   "wallet": 50,
+   "official_score": 59.3,
+   "official_review": "pass",
+   "approach": "Qwen3.6-27B-FP8 planner writes SVG drawing programs rendered by resvg. Z-Image-Turbo generates photo regions and PP-OCRv5 inpaints stray text. A fine-tune on gpt-6-luna-written synthetic cases was tried, but the base checkpoint shipped. No imagegen skill use.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'synthetic cases written by openai/gpt-6-luna through the Spin OpenRouter proxy ... the final selected candidate to be the base checkpoint'",
+    "No imagegen or image-model API calls; FLUX.2-klein-4B and Z-Image were run on Spin GPUs (wallet)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "5dab48",
+   "wallet": 200,
+   "official_score": 50.6,
+   "official_review": "pass",
+   "approach": "Qwen3.5-35B-A3B-FP8 writes a drawing program run by a safe AST interpreter, using local fonts, icons and bundled Unsplash stock photos. Prompt and model chosen on self-written requests; public set used once after freezing.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'stock photos with generic names'; trajectory downloads images.unsplash.com photos (real photos, not generated)",
+    "No imagegen use; no image-generation API"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "1o4dal",
+   "wallet": 10,
+   "official_score": 32.5,
+   "official_review": "pass",
+   "approach": "Hand-written Pillow procedural renderer with no model weights (SDXL and FLUX tried and dropped).",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'The shipped generator is a programmatic renderer (app/renderer.py) with no model weights'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "1e2cfd",
+   "wallet": 50,
+   "official_score": 22.4,
+   "official_review": "pass",
+   "approach": "Procedural PIL canvas refined by FP8 Z-Image-Turbo img2img, with RapidOCR erasing invented text and exact text rendering.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'layout.make_canvas draws a procedural PIL canvas, Z-Image img2img refines it'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "4lxo1r",
+   "wallet": 200,
+   "official_score": 18.6,
+   "official_review": "pass",
+   "approach": "Procedural render, then two Z-Image-Turbo img2img passes (strength 0.35, and 0.85 on media rectangles), then text overlay.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'two img2img passes (strength 0.35, and 0.85 for the media rectangles)'"
+   ],
+   "confidence": "high"
+  }
+ ]
+}

@@ -1,0 +1,223 @@
+{
+  "task": "severity-agnostic-turbulence-mitigation",
+  "task_level": {
+    "spec_issues": [
+      "Title and constraint do not match. The id says 'make-the-mambatm-turbulence-restorer-safe-on-mild-turbulence-without-los[ing]...', the overview says 'reward of 0 if its PSNR averaged over strengths 6, 8 and 10 falls over 0.1 decibels below the starter's', and the prompt says 'at most a 0.1 dB drop from baseline quality on the strongest turbulence'. The public verifier implements the overview: STRONG_BINS=(6,8,10), STRONG_MARGIN_DB=0.1, valid=int(strong_gate_passed) (run_sweep.py, gpt-6-astra__6RCWGpu [3]). The prompt's 'strongest turbulence' is vague but consistent.",
+      "The gate never binds. Every trial improves strong-bin PSNR on the public sweep by +0.80 dB (Gemini Flash Taw69S6) to +1.97 dB (Fable eTezLSD), because fine-tuning on the full simulator range helps strong turbulence too. The task therefore measures plain average-error reduction; the 'safety' trade-off its title advertises is never tested.",
+      "The simulator's params.csv 'val' split (rows 600-899) holds exactly the public test's optics rows (kimi-k3__zzQfEQx [11]-[12]). Training on 'the supplied simulator' with all 900 rows (Kimi zzQfEQx, Grok vkezTdK, Gemini Flash GqqP35X) is allowed by the rule but makes the public sweep an in-distribution check. The private test uses 'new lens, distance and air settings', and the private/public reward ratios show no advantage for these trials."
+    ],
+    "verifier_issues": [
+      "Public shards hold 20 clips, but private shards hold up to 48 within the same 120 s limit (SHARD_CLIPS=48). Agents had to extrapolate runtime themselves: GPT 6RCWGpu measured 102.41 s per 48 clips and GPT wf7cQhW 108 s for one candidate. All passed, but a slower grading GPU could have zeroed the heavy-ensemble submissions.",
+      "The private breakdown reports only objective/baseline_objective, not the strong-bin PSNR delta, so gate compliance can be inferred only from valid=1.",
+      "Two trials (Gemini Flash GqqP35X, Grok EzQwRFv) have an official reward but rewards={} with ArtifactCollectionError. Their rewards (0.321, 0.360) match their public results scaled by the common private/public ratio (~1.2), so they look real but cannot be verified.",
+      "The private baseline_objective is constant (0.46737) across trials, and the private shuffle seed is secret per run; no drift was observed."
+    ],
+    "noise": "Inference is deterministic on a fixed set of 420 clips, so the noise is negligible. Every trial's private reward is 1.13-1.25x its last public reward (Fable 0.642 -> 0.738, GPT wf7cQhW 0.554 -> 0.619, Kimi zzQfEQx 0.426 -> 0.484, Grok vkezTdK 0.287 -> 0.345, Gemini Flash Taw69S6 0.198 -> 0.237), and the public and private orderings agree. The model-level gaps that decide the Elo games (Fable 0.74/0.71 vs GPT 0.62/0.50 vs the rest at 0.24-0.48) are far larger than any plausible measurement noise. The only near-tie is Gemini Argon RaMGX2p 0.460 vs Kimi zzQfEQx 0.484.",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "The scoring is deterministic and the public and private orderings agree. The non-binding strong-bin gate and the 20-vs-48-clip timing mismatch are spec weaknesses but did not change any outcome; Fable wins clearly on both attempts.",
+    "science_vs_gaming": "All gains are legitimate engineering on a strong pretrained model: MSE-aligned fine-tuning on the supplied simulator with strength-balanced or metric-weighted sampling, function-preserving depth/width growth (Net2Net-style), dihedral x time self-ensembles, weight soups, and (GPT) flow-guided temporal fusion. Small physics-motivated touches add little but are genuine: DC/mean matching (Fable eTezLSD) and output extrapolation to counter ensemble over-smoothing. There was no test-data training, no cross-call state and no severity-label leakage. The benchmark-adjacent behaviours (training on val-split optics rows, bin weights set from public per-bin results) are allowed or negligible."
+  },
+  "trials": [
+    {
+      "model": "claude-fable-5.1",
+      "trial": "eTezLSD",
+      "official_reward": 0.7382616748479005,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Long fine-tune (~190k iterations) of a grown MambaTM ('MambaTMx': 8 Mamba blocks plus zero-initialised residual 3-D-conv temporal fusion of the encoder skips) on on-the-fly simulator data. Training uses log-uniform D/r0 over 1.5-10 and only the simulator's train optics rows; the loss goes Charbonnier -> MSE with per-sample weights (D/r0/4)^-0.6 that mimic the per-bin relative-MSE metric, plus EMA. Inference runs a 16-pass dihedral x time-reversal self-ensemble with an adaptive wall-clock budget, plus 'DC matching' (shift each restored clip to the degraded input's mean, since turbulence preserves mean intensity).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff code/NOTES.md: results table, final public S 0.3122 vs 0.5126, 'strong-bin PSNR 32.05 dB' vs 30.09 dB baseline (+1.96 dB, far above the -0.1 dB gate)",
+        "patch.diff code/NOTES.md: 'optics rows from the simulator's *train* split'; 'the public sweep was used only to check and compare models'",
+        "patch.diff code/restore_sweep.py: '--time_budget 70.0' adaptive pass dropping keeps 48-clip shards inside 120 s; '--dc_match' mean correction",
+        "trajectory [272]: 'reward 0.642, strong-turbulence gate passed (+1.97 dB)'; private reward 0.738 (private/public ratio 1.15, typical of all trials)"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5.1",
+      "trial": "xdbSjnL",
+      "official_reward": 0.7081163664933412,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "10-block 'MambaTM_tf' (temporal skip fusion + identity-initialised extra Mamba blocks) fine-tuned ~245k iterations on simulator data (train optics rows): MSE, then a D/r0-weighted polish, EMA. Inference runs a 16-pass geometric self-ensemble in fp32 with a wall-time-aware pass controller and a small output extrapolation (1.025-1.035, tuned on a self-generated validation sweep).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [293]: 'S = 0.3174 vs baseline 0.5126 -> reward +0.615; strong-bin PSNR +1.95 dB ... 48-clip shard ~ 49 s'",
+        "patch.diff code/training/train.py: '--optics_split' default 'train'; the validation sweep uses val optics rows ('Fixed held-out validation sweep ... val optics rows')",
+        "trajectory [180]-[181]: extrapolation sweep 'for a in [1.02, 1.025, 1.03, 1.035, 1.04]' was scored on local validation, not on the public test ('-0.17% improvement on val S')"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "wf7cQhW",
+      "official_reward": 0.6188014725851136,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "MambaTM backbone fine-tuned on simulator data (train optics), run as a 16-view D4 x time ensemble whose outputs feed a learned optical-flow-guided temporal fusion/refiner ('MambaTMFlowWideSpatial16TTA4'), trained jointly and then calibrated on all 16 backbone views. Runtime was stress-tested on 48-clip D/r0=10 groups.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [145]: public 'S = 0.3300 ... strong-bin PSNR change vs baseline: +1.914 dB ... reward +0.5535'",
+        "patch.diff code/WORK_LOG.md: 'Stress-tested 48 high-temporal-change, D/r0=10 training-derived clips: ... 108.10 seconds' for one candidate. The configuration chosen for the final artifact was the faster one (public 20-clip shards 36 s), so the 120 s limit was a real constraint",
+        "patch.diff code/WORK_LOG.md: 'No public-test tensors are used for development or training'"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "6RCWGpu",
+      "official_reward": 0.502351593055729,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Function-preserving growth of MambaTM to 64 features / 8 blocks (130M parameters; Net2Net-style depth identity and width splitting), relative-MSE training on the online simulator with balanced strengths, D4 test-time ensemble with fp16 passes, a small 'phase extrapolation' (1.1 native / -0.1 (3,3)-shifted prediction), and conservative motion-compensated temporal fusion. The weights ship under the original file name model_zoo/MambaTM_reds.pth.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff code/RESTORATION.md: 'S 0.36608050 versus 0.51262165 ... Strong-group PSNR increased by 1.461 dB ... 48 strongest-turbulence clips in 102.41 seconds'",
+        "patch.diff code/RESTORATION.md: 'Architecture selection initially reserves 60 of the 660 training clips and 120 of the 600 training-optics rows ... Training/evaluation scripts do not read any harness evaluation arrays'",
+        "trajectory [226]: 48-clip timing 102.41 s against the 120 s limit; the private run still graded valid"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "zzQfEQx",
+      "official_reward": 0.48401931890084526,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "MSE fine-tune of the supplied MambaTM on the simulator using all 900 optics rows (train + val split; the val split is where the public test's optics come from), symmetry augmentation, EMA. Function-preserving deepening 6 -> 12 -> 18 blocks with warm-restart polishes, then 16x flip/rot90 self-ensemble at inference.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [12]: 'test optics rows are 600-899 = the val split of params.csv ... I'd rather train on all 900 rows (train+val) without referencing meta.json'; trajectory [15]: 'all 900 optics rows'",
+        "trajectory [241]: public reward +0.4264, 'Strong-turbulence gate: +1.481 dB'; '62s per worst-case 48-clip shard'",
+        "The private test uses new optics settings and this trial's private/public ratio (1.135) is no higher than for train-optics-only trials (1.15-1.25), so the val-row training gave no visible private advantage. It only made the public sweep an in-distribution check. The rule allows 'the supplied simulator', so this is not a violation"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "RaMGX2p",
+      "official_reward": 0.4604146443725361,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Staged fine-tunes of the original-size MambaTM (with GMamba/Hilbert implementation tweaks), followed by weight soups of several checkpoints into two 'specialist' models (weak/medium and medium/strong). Their predictions are interleaved across a 16-symmetry weighted test-time ensemble.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [276]: 'Candidate: S = 0.375212 ... strong_psnr = 31.4301 dB (delta +1.3411 dB, PASS) | reward = +0.366219'",
+        "trajectory [277]: soups 'sd_a = 0.50*c3250_14 + 0.35*m14 + 0.15*swa15' and an interleaved 2-model ensemble; both models are applied to every clip, so no severity routing or labels are used"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "GgbhMfx",
+      "official_reward": 0.39028348425524895,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Fine-tuning with a faster factorised P2S simulator, an objective mixing relative MSE, log-MSE, Charbonnier, FFT loss and direct pixel-shift supervision from the simulator, EMA/SWA, several added 3-D refinement modules (flow-align / lucky-frame post-refiners), and 8x dihedral test-time augmentation.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [185]: public 'S 0.386377 ... strong_psnr = 31.294 dB, +1.205 dB ... reward +0.326738'",
+        "patch.diff code/train_MambaTM_dynamic.py: '--optics_split' default 'train' (an 'all' option exists); local validation uses its own generated sweep ('local_val_sweep')"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "EzQwRFv",
+      "official_reward": 0.36019791162917114,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Fine-tune of MambaTM on simulator data (train optics) with a mixed relative-MSE/MSE loss plus edge and flow terms and SWA. D/r0 bins are sampled with weights chosen from the public sweep's worst bins (3, 4, 10). Inference is a single model with 16-view averaging; the auxiliary refiners were not used in the final artifact.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [552]: 'official public sweep scores S = 0.3930 ... reward of 0.3045, strong-turbulence PSNR is +1.122 dB'",
+        "trajectory [72] / patch.diff train_finetune.py: '# Slightly emphasize the bins that remain worst on the public sweep (3, 4, 10). BIN_WEIGHTS = (1.0, 1.0, 1.6, 2.0, 1.2, 1.0, 1.6)'. This is a mild use of public per-bin results to shape training; with 7 coarse weights and bins that are also worst on local validation, the overfitting risk is negligible",
+        "summary.json: rewards = {} with ArtifactCollectionError, so the private gate and validity cannot be inspected. The official reward 0.360 is consistent with its public 0.3045 (ratio 1.18, as for the other trials), and the public strong-bin margin of +1.12 dB makes a hidden gate failure implausible"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "vkezTdK",
+      "official_reward": 0.3451398237570087,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Depth-expanded MambaTM fine-tuned on simulator data with all optics rows (load_optics(None)). Checkpoints are selected on a local validation set; the public sweep was only logged during training. Inference uses D4+time ensembling, fp16 and multi-scale mixing configured in ensemble.json.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [569]: 'Official score: S = 0.3982, reward 0.2872, strong-bin PSNR +1.079 dB'",
+        "patch.diff train_*.py: 'best.pth' is saved on 'VAL ... S' (local validation); the '--public-period' branch only logs 'PUBLIC iter=... S=...' without selection",
+        "patch.diff: 'optics = load_optics(None)' in the training scripts (train + val optics rows); private/public ratio 1.20, no visible advantage"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "QgmjK36",
+      "official_reward": 0.3350984607431233,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "MSE-centred fine-tune of MambaTM (30k iterations, bin-matched sampling, EMA, rot90/time-flip augmentation) on train optics, Net2Net depth growth 6 -> 12 blocks with a second fine-tune, and 16x dihedral x time-flip test-time augmentation.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [167]: 'valid=1, reward=0.2870, S=0.3983 ... Strong-bin gate passed (+1.041 dB)'; '~26s per 20-clip shard, safely within the 120s limit for 48-clip private shards'",
+        "patch.diff code/train_improved.py: '--optics_split' default 'train'"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "GqqP35X",
+      "official_reward": 0.3210440022996437,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Fourteen successive fine-tuning stages of the original MambaTM. Later stages use all 900 optics rows, heavy MSE weighting, and oversampling of the hardest bins (3, 4) with per-bin loss weights. Inference uses 16x test-time augmentation.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [1372]: public 'S = 0.404186 ... reward = +0.268281 ... Strong Turbulence PSNR 31.1167 dB (delta +1.0277 dB)'; '~19.5-19.8 seconds per shard'",
+        "patch.diff code/train_stage14.py: '60% of training focused on hardest bins (3.0 and 4.0)', 'load_optics(split=None)'",
+        "summary.json: rewards = {} with ArtifactCollectionError; the official reward 0.321 is consistent with public 0.268 (ratio 1.20), and the +1.03 dB public strong-bin margin makes a hidden gate failure implausible"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "Taw69S6",
+      "official_reward": 0.23739499157263522,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Single fine-tune of MambaTM on train-optics simulator data (cached simulator constants for speed) with 16x test-time augmentation.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [464]: public 'objective 0.427819 ... Strong PSNR Delta: +0.7952 dB ... 140 / 140 clips' improved",
+        "patch.diff code/LPD_learning/utils/simulator.py: only caches loaded constant tensors (_CACHE); the simulated distribution is unchanged and the grader uses pre-generated clips"
+      ],
+      "confidence": "high"
+    }
+  ]
+}

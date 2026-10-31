@@ -1,0 +1,222 @@
+{
+  "task": "turbulence-latent-trajectory-denoising",
+  "task_level": {
+    "spec_issues": [
+      "The overview and prompt agree. The prompt adds 'don't return stored answers or exploit noise seeds' and allows dev only for 'aggregate scores'. dev.npz stores its noise_seed, so agents can and did reproduce the exact dev noise for local tracking (Fable 78SNWcr/hnWjajq), but the private run draws fresh noise, so this gives no advantage.",
+      "restore.py receives the true condition_id and sigma for every sequence, so the task is non-blind Gaussian denoising with a known prior generator. The 'unseen' private sequences are i.i.d. draws from the same simulator+encoder that agents can sample without limit, which makes this a supervised-learning and capacity problem more than a modelling problem.",
+      "The starter truncates to a rank-64 PCA basis. Simply raising the rank (to ~2048-4096) and fitting the full Gaussian prior already yields reward ~2.0 of the best 2.75; every trial found this first (Gemini Flash 4LuQaZs ships only that)."
+    ],
+    "verifier_issues": [
+      "The private evaluation re-runs the frozen baseline on a fresh noise draw per trial: baseline_objective ranges 0.068772-0.068858, a 0.13% spread, so scores are paired and stable.",
+      "Two trials (GPT CgZXFaG, Gemini Flash 4LuQaZs) have official rewards but empty breakdowns (4LuQaZs with ArtifactCollectionError). Their rewards fit their dev results plus the common +0.06-0.08 private offset, so they look genuine but cannot be checked.",
+      "No way to game the verifier was found: the output contract is a dense array, the noise is fresh per run, and the fixed 1 GiB / 1200 s limits were far from binding (5-55 s runtimes)."
+    ],
+    "noise": "Very low. Every trial's private reward is its final dev reward plus 0.05-0.08 (Fable 2.671 -> 2.747, Fable 2.653 -> 2.733, GPT m5NsTAX 2.510 -> 2.588, GPT CgZXFaG ~2.583 -> 2.660, Argon 2.486 -> 2.559 and 2.439 -> 2.515, Gemini Flash 2.232 -> 2.306 and 1.987 -> 2.040, Kimi 2.149 -> 2.208 and 2.079 -> 2.142, Grok 2.135 -> 2.195 and 2.088 -> 2.158). The dev and private orderings match exactly. The baseline varies only 0.13% across trials. The only within-noise pair is Fable's two runs (2.747 vs 2.733, a 0.4% objective difference); the cross-model gaps that decide the Elo games are 1-15% in objective, far above the ~1% sampling error the agents estimated.",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "The scoring is stable (fresh paired noise, 0.13% baseline drift, dev and private orderings identical), so the model ordering Fable > GPT > Argon > Gemini Flash/Kimi/Grok is not noise-driven and no scoring defect changes the winner.",
+    "science_vs_gaming": "No gaming. Nobody fitted on dev, used noise seeds at test time or stored answers. Most of the measured gain is generic: replacing the rank-64 truncation with a high-rank (full-data) Gaussian/Wiener prior gives ~0.0223 NMSE (reward ~2.0) for everyone. The remaining 0.2-0.75 reward comes from learned nonlinear residual correctors (U-Nets, NAFNets, MLPs, block regressors) trained on unlimited generator data. The top four trials share one task-specific insight: the frozen encoder imprints a fixed periodic (period-4/8) phase pattern, so phase-aware pixel-unshuffled networks see stationary statistics. This is competent applied denoising (known techniques), not new research, and the narrow 2.0-2.75 band mostly reflects how much nonlinear refinement each agent added on top of the same linear core."
+  },
+  "trials": [
+    {
+      "model": "claude-fable-5.1",
+      "trial": "78SNWcr",
+      "official_reward": 2.7469477503736712,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Stage 1 is a rank-2048 PCA Gaussian prior with per-mode AR(1) Kalman smoothing, fitted on train.npz plus generator data (dev NMSE ~0.0224). Stage 2 is a 0.65/0.35 ensemble of two (2+1)D U-Net residual denoisers trained on generator data with sampled noise levels. They take the noisy frames and the Gaussian posterior mean and predict a correction, with a runtime fallback. The ensemble weight was chosen on dev aggregate (flat between 0.5 and 0.8).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [264]: 'Gaussian posterior mean -> 0.65/0.35 ensemble of two (2+1)D UNet denoisers ... geometric-mean NMSE 0.01816 vs baseline 0.06668'",
+        "patch.diff train_cnn.py: dev is rebuilt with the stored noise_seed only for tracking ('dev_score') and checkpoint choice; training data = train.npz + '--gen' generator files",
+        "trajectory [198]: ensemble weight scan 'for w in [0.5, 0.6, 0.65, 0.7, 0.8, 1.0]', 'fairly flat across weight ratios 0.5-0.8'. Choosing a model on dev aggregate is explicitly allowed",
+        "trajectory [264]: 'dev with a different noise seed (0.0182)' and held-out generator data 0.0183 give the same score, so it does not exploit the dev noise draw; private 2.747 vs dev 2.671"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5.1",
+      "trial": "hnWjajq",
+      "official_reward": 2.7328224466242537,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Stage 1 is a pooled-eigenbasis Gaussian smoother: conditions with the same turbulence strength share frame statistics, giving 2048 eigenvectors with per-condition AR(1) dynamics and an exact posterior mean (dev 0.02242). Stage 2 is an equal-weight ensemble of two residual (2+1)D U-Nets (15M/37M parameters) on a period-8 pixel-unshuffled 16x16x64 grid, where the encoder's fixed period-8 texture makes the statistics stationary. Both stages are trained on train.npz plus generator seeds 1001-1048.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff trajectory_prior/README.md: 'The encoder leaves a period-8 texture, so frames are pixel-unshuffled by 8 ... stage 1 only 0.02242 | stage 1 + CNN ensemble (shipped) 0.01825'",
+        "patch.diff README.md: 'Everything is fit only on clean trajectories from train.npz and from the supplied generator (seeds 1001-1048) ... dev.npz was used only to read aggregate scores'",
+        "trajectory [52]: the agent estimates '~1-1.5% standard error on the geometric mean' from dev sampling, so sub-1% differences are not resolvable",
+        "Recognising the period-8 phase structure of the frozen encoder is the most task-specific insight in this task; the tools themselves (Wiener prior + residual U-Net) are standard"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "CgZXFaG",
+      "official_reward": 2.6604120118468657,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "High-rank population PCA Gaussian prior (1,536 directions per strength group, fitted on 270k original and generated frames, plus a Nystrom variant for weak conditions), followed by phase-aware CNN refiners that pixel-unshuffle to keep the encoder's sub-pixel phases, a cascade/calibration stage, and specialist mixtures, all trained on generator data.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff README.md: 'Final verification: NMSE 0.01860881 versus 0.06667899 ... retaining 1,536 directions per strength group ... Generated holdouts under data/ are validation-only ... No restored-answer lookup or benchmark-noise-seed dependence is used'",
+        "trajectory [6] WORK_LOG write: 'Maps have a large deterministic, spatially periodic encoder pattern ... a larger, shared PCA prior reduces aggregate dev NMSE from 0.06668 to about 0.02403' ([12]); trajectory [12] network.py: 'A four-pixel rearrangement preserves ... the frozen encoder's subpixel phases'",
+        "summary.json: rewards = {} and no exception (34 user turns, later run), so the private breakdown is missing. The reward 2.660 equals its dev result 2.583 plus the common +0.07 private offset, so it looks genuine"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "m5NsTAX",
+      "official_reward": 2.587609564736042,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "PCA Gaussian prior plus several neural experts (shared, phase-16, spatial) whose outputs, together with the Gaussian estimate and the raw residual, are stacked by regularised spatial blend coefficients and confidence calibration fitted on fresh generator chunks.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [203]: 'NMSE 0.01899665, versus baseline 0.06667899 ... Reward 2.510039 ... Restore time 31.06 seconds'",
+        "patch.diff WORK_LOG.md: 'combine expert, shared, phase-16, and Gaussian estimates ... with regularized spatial coefficients learned from fresh generator data'; 'Collected 64 fresh calibration chunks ... generation seeds are disjoint'"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "CpnFVQM",
+      "official_reward": 2.559118000551952,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Pooled spatio-temporal Wiener filter, then a cascade of hand-engineered polynomial/linear refiners on multi-band, phase-dilated, 8x8 block-phase and 16x16 bottleneck-block features (exploiting the encoder's block/phase structure), then an ensemble of small spatio-temporal NAFNets trained on 5 out-of-fold noise draws of 3,328 clean trajectories from train plus generator.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [303]: 'Submission Geometric Mean NMSE 0.019130 ... +2.485641 ... Artifact Size 680 MiB'",
+        "trajectory [19]: 'the prompt forbids fitting on dev.npz ... I will NOT look at the individual' entries; it built local_val.npz from the generator for model selection",
+        "The submitted folder contains only model.py/restore.py plus fitted params. The fitting scripts are not shipped, so the result cannot be reproduced from the artifact, but no rule requires them"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "3XGKFg3",
+      "official_reward": 2.5147477410852064,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Pooled spatio-temporal Wiener filter followed by a 5-layer cascade of nonlinear block regressors (multi-shift 8x8 blocks, overlapping windows, anisotropic/heterogeneity features) with least-squares weights fitted on generator data and validated on a self-generated local set.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [242]: dev 'reward 2.4387519654781977, objective 0.019390'; private 2.515 (+0.076, the common offset)",
+        "trajectory [34]: 'create a local validation set, val_local.npz, containing 48 trajectories per condition'; dev used to verify milestones",
+        "patch.diff model.py: 'Stage-2 Pooled Spatio-Temporal Wiener + 5-Layer Multi-Scale & Overlapping-Window Block Nonlinear Cascade'"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "3q8vdhv",
+      "official_reward": 2.3061196849573373,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "The PCA rank goes from 64 to 3072, capped at the number of available frames, with a diagonal per-mode AR(1) Kalman smoother solved exactly as a tridiagonal system. A 7-layer dilated CNN (refine_state_dict inside params.pt) corrects the Kalman posterior mean from the normalised estimate, the residual and sigma/latent_std.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff fit.py: '--rank' default 64 -> 3072; model.py: fast_solve 'Exact decoupled tridiagonal solver for AR(1) state-space Kalman smoothing' + 'RefineCNN'",
+        "trajectory [262]: dev 'reward 2.2324793849767848'; trajectory [138]: 'dev NMSE plummeted from 0.022724 to 0.021760' after adding the CNN (the linear part alone is ~0.0227)",
+        "trajectory final step [269]: hyperparameter grid for the CNN scored on a dev subset ('Condition 0 GM'). This chooses models by aggregate dev score, which is allowed, and the private result (2.306) is above dev (2.232)"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "WPX7E42",
+      "official_reward": 2.2076905986711366,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Rank-4096 PCA per D/r0 group with per-mode stationary Toeplitz temporal covariance and a per-pixel temporal complement Wiener filter, fitted on train.npz plus 1,400 generator shards (~22.5k trajectories per condition), which is close to Bayes-optimal among linear estimators (0.02235). On top sits a per-frame cross-mode MLP that corrects the top-1024 coefficients (0.02118).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [418]: 'Proven via ~8 independent checks to be Bayes-optimal among linear estimators (0.02235 alone, +1.98) ... Coefficient-MLP refiner ... reaching 0.02118 (+2.15)'",
+        "The linear-only number (+1.98) equals what Gemini Flash 4LuQaZs reaches with a pure Wiener filter, showing that most of every agent's gain is the generic high-rank Gaussian prior"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "bbUmbse",
+      "official_reward": 2.1946298811032294,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Condition-wise high-rank PCA with scalar AR(1) RTS smoothing plus a complex circular AR(1) Fourier-domain residual prior, a Fourier-domain linear correction estimated on held-out generated clean draws, and small coefficient and spatial residual correctors. Extra clean trajectories come from the frozen generator.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [387]: 'Reward 2.1352, objective 0.021268' (dev); private 2.195",
+        "patch.diff generate_extra.py: 'Generate extra clean latent trajectories with the frozen encoder and simulator'; coeff_corrector.py / spatial_corrector.py residual correctors"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "DENHGGE",
+      "official_reward": 2.1584121232659896,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Hybrid spatial PCA Wiener filter plus a Fourier residual prior, a cubic residual bias correction, and a small 3-D conv residual corrector whose correction is halved inside the leading 32 PCA modes (already near linear MMSE). Shrink settings were chosen on a holdout.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [436]: 'official geometric-mean NMSE is 0.02159 versus the baseline 0.06668 ... halves the 3D-net correction inside the leading 32 PCA modes ... Nearby shrink settings did not beat this choice on holdout'",
+        "patch.diff model.py: 'Hybrid trajectory denoiser: spatial PCA Wiener plus Fourier residual prior'"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "yZXCrFP",
+      "official_reward": 2.1419981256180094,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "High-rank mean-PCA with per-component temporal GP smoothing and a per-pixel temporal-GP complement posterior, an amplitude-adaptive scale-mixture GP (+0.2%), a 4-CNN residual ensemble whose corrections are summed rather than averaged (~+3%), and time-reversal test-time augmentation (+1.2%).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "trajectory [419]: 'Improved linear Gaussian model -> 0.023 ... 4-CNN residual ensemble (summed) -> 0.02221 ... Time-reversal TTA -> 0.02166 ... Final reward: 2.0785'",
+        "trajectory [419]: validated on 'multiple independently generated never-seen sets (0.0217-0.0222)'"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "4LuQaZs",
+      "official_reward": 2.03975053990684,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Pure linear empirical-Bayes filter: a separable spatio-temporal Wiener filter with a rank-3800 spatial KL basis (capped at the number of frames), per-mode stationary Toeplitz temporal covariance with a Hann lag window, and a per-sequence James-Stein-style energy rescaling of the leading-256-mode prior from the noisy data and the known sigma. No neural network.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff model.py: 'Spatio-temporal empirical Bayes Wiener trajectory prior'; toeplitz_hann_cov; 'Trajectory-adaptive energy scaling (James-Stein shrinkage on energy)'",
+        "trajectory [364]: dev 'geometric mean 0.06668 -> 0.02232 ... improvement B/C-1: +1.9868 ... runtime 5.59s'",
+        "summary.json: rewards = {} with ArtifactCollectionError. The official 2.040 equals dev 1.987 plus the common private offset, consistent with a genuine run. This trial shows that a textbook Wiener filter alone earns ~74% of the best model's reward"
+      ],
+      "confidence": "medium"
+    }
+  ]
+}

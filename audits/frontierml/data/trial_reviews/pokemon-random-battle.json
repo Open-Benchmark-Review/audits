@@ -1,0 +1,357 @@
+{
+  "task": "pokemon-random-battle",
+  "task_level": {
+    "spec_issues": [
+      "The rules are permissive and clear. Unchanged or modified Foul Play is an allowed submission. Validation-guided selection is allowed (tasks/pokemon-random-battle/tests/task/review.py:79-84). Only private evaluation access, opponent private state or RNG, test detection and cached evaluation actions are forbidden. All 18 submissions are Foul Play plus poke-engine MCTS with changes on top. No trial accessed the private matchups (they live in inductionlabs/frontier-ml-tasks pokemon-random-battle/private, tests/data.json), the repo or frontierml.org. The few 'frontier-ml' hits are the local /opt/frontier-ml harness directory.",
+      "CONTRACT.md says 'Treat requests as stateless; public_log contains the complete visible history'. The reviewer policy has no stateless check. Several bots cache reconstructed battle state across requests: DeepSeek 4ypkgp ('LRU keyed by (player, sorted own-team species)', final message [612]), Muse 3oxwfl ('LRU-cached by team/log fingerprint', final message [203]) and Muse q76m16 (shards by game fingerprint). These caches only speed up reconstruction of the same visible history, and none caches actions, so I do not count them as violations."
+    ],
+    "verifier_issues": [
+      "Reward = clamp((mean_battle_points - 0.5)/0.5, 0, 1) over 3,000 games: 1,500 fixed matchups, each played from both sides (task.yaml:115-118; CONTRACT 'Evaluation'). The opponent is pinned Foul Play at 100 ms per sampled state. Every submission is a Foul Play derivative, so raw scores cluster at 0.485-0.537 and rewards at 0-7.4. The paired standard error is about 0.0083 raw, or 1.66 reward points. Half the field is clamped to 0 (8 of 18 trials at or below 50%), and clamping hides the gap between 0.497 (Opus 8i7wzs) and 0.430 (Muse 3oxwfl).",
+      "A response over 1.0 s forfeits every game in that batch (up to 32). Only two trials hit this: Astra 5phq1t (116 move_timeout_forfeits) and Muse 3oxwfl (308). Both ran search budgets close to the deadline. Astra's final selfcheck reported median 0.911 s and p95 0.920 s, and its own validation 'a slowest response of 0.924 seconds' ([1287]). These are design choices the selfcheck warned about ('A grade plays whole games, whose late turns carry longer public logs'), not infrastructure faults. If Astra's 116 forfeited games had been played at its 53.6% rate, its score would have been about 11 instead of 7.2, which would beat Opus 5ynzr7's 7.4 at $50.",
+      "Opponent forfeits from illegal Foul Play choices count as candidate wins (0-1 per trial), and capped 200-turn games count as losses (0-1 per trial). Both are negligible."
+    ],
+    "noise": "Differences between models are mostly within 1-3 paired SE (1.66 points each). $10: Astra gldk67 6.4 vs Gemini mqu25j 3.27 (about 1.9 SE). $50: Opus 5ynzr7 7.4 vs Astra 5phq1t 7.2 vs DeepSeek 4ypkgp 6.13, all within 1 SE. $200: Gemini 59idzz 3.6, Astra 2ithii 3.07, Opus 5yrulw 2.73, Fable 1.53, all within about 1 SE. Wallet ordering is noisy for every model (Opus 0, 7.4, 2.7; Astra 6.4, 7.2, 3.1). Extra money buys nothing because the only lever is CPU search time inside a fixed 1 s / 8-core budget. Each winner would plausibly change on a rerun.",
+    "elicitation": "Every agent converged on the same design: vendored Foul Play reconstruction plus poke-engine MCTS over sampled opponent sets, with an 8-process pool and a 0.75-0.9 s budget, plus small changes (more determinizations, deterministic argmax, opponent modelling, value-net reranking). Astra used 6-11 hours and 640-1,301 steps and trained self-play value nets. Most others stopped at 2-5 hours. Gemini runs are re-runs (-r2). The budget had little to buy: Opus $200 spent $111 on self-play evaluation and scored lower than its $50 run.",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "All 18 passed review. I found no false positive or false negative, and no zero caused by infrastructure. The only forfeits (Astra 5phq1t, Muse 3oxwfl) come from the agents' own near-deadline budgets. The winners (Astra $10, Opus $50, Gemini $200) are within noise of the runners-up. That is a measurement-quality problem, not a scoring defect.",
+    "science_vs_gaming": "No gaming was found. The measured signal is small: the best bots beat their own opponent's algorithm by 3-4 percentage points. The gains come from engineering on the pinned opponent's own search (deterministic argmax, more samples, more time). Opus 5ynzr7 modelled Foul Play's choices from its point of view, and Astra's $10/$50 runs added a reranker built from the public Laplace value net or self-play value nets. None of this transfers beyond 'beat Foul Play at 100 ms', and most of the 18 scores are indistinguishable from an unchanged Foul Play mirror."
+  },
+  "trials": [
+    {
+      "model": "claude-opus-5-5",
+      "trial": "8i7wzs",
+      "wallet": 10,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "Foul Play reconstruction and poke-engine MCTS over sampled determinizations, with visit shares combined across samples. An MLP reranker experiment was abandoned and not shipped. Raw 0.497, clamped to 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: wins 1491 / losses 1509, paired SE 0.0081: indistinguishable from 0.5",
+        "Reviewer: 'one training attempt, an MLP reranker ... was abandoned, ships no weights and is not imported'",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-opus-5-5",
+      "trial": "5ynzr7",
+      "wallet": 50,
+      "official_score": 7.4,
+      "official_review": "pass",
+      "approach": "Unmodified vendored Foul Play adapted by monkeypatches. poke-engine MCTS on a determinized opponent team, followed by a one-turn lookahead re-rank with an opponent model that predicts the pinned Foul Play's choice from its own point of view. Highest score on the task (7.4).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[163] writes bot/oppmodel.py: 'Opponent model: predict the pinned Foul Play opponent's choice from its own point of view'",
+        "[192] 'The stateless clone holds at ~50% parity over ~6,000 games, and extra search compute doesn't help'",
+        "grade: 0.537, 1 opponent forfeit, 0 timeout forfeits",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory.",
+        "Wins $50 by 0.2 points over Astra 5phq1t, within noise"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-opus-5-5",
+      "trial": "5yrulw",
+      "wallet": 200,
+      "official_score": 2.73,
+      "official_review": "pass",
+      "approach": "Search-only Foul Play / poke-engine MCTS with argmax over root visits across samples. A learned policy-prior experiment trained on its own dev games was not served. $111 wallet spent on self-play evaluation.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'A learned policy-prior experiment (dev/train_policy.py) is declared as unserved'",
+        "grade: 0.5137, paired SE 0.0083",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "46sb14",
+      "wallet": 10,
+      "official_score": 0.13,
+      "official_review": "pass",
+      "approach": "Unmodified Foul Play with organizer adapter fixes at runtime, poke-engine MCTS in forked workers, heuristic fallback. Raw 0.5007.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: wins 1502 / losses 1498, i.e. a mirror match",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "1ivy96",
+      "wallet": 50,
+      "official_score": 1.0,
+      "official_review": "pass",
+      "approach": "Foul Play reconstruction plus poke-engine MCTS with search settings chosen by dev-seed A/B tests. An optional expectiminimax best-response path is disabled. Raw 0.505.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'development was dev-seed A/B selection of search settings with no training'",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "zntfdz",
+      "wallet": 200,
+      "official_score": 1.53,
+      "official_review": "pass",
+      "approach": "Foul Play tracker plus poke-engine MCTS, argmax of root visit shares, three local fallbacks. Raw 0.5077.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: 0.5077, paired SE 0.0083",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "gldk67",
+      "wallet": 10,
+      "official_score": 6.4,
+      "official_review": "pass",
+      "approach": "Foul Play state reconstruction and MCTS over sampled worlds. Near-tied actions are reranked with the public pretrained Laplace value net (influxtion/Laplace-Pokemon-Showdown-AI, converted to safetensors, not fine-tuned). Wins $10.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'the only pretrained weights as influxtion/Laplace-Pokemon-Showdown-AI models/value_net.pt at revision 4053b5f9 ... marked not fine-tuned' (trajectory#815)",
+        "grade: 0.532, 1 opponent forfeit",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "5phq1t",
+      "wallet": 50,
+      "official_score": 7.2,
+      "official_review": "pass",
+      "approach": "Weighted determinizations, poke-engine MCTS and a neural rerank from two self-play value MLPs (one initialised from the zero-extended Laplace net), with rage and revival refinements. Search budget about 0.91 s per batch on a 1.0 s deadline. 116 games were forfeited for late responses.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: move_timeout_forfeits 116; final selfcheck 'median 0.911 s, p95 0.920 s'",
+        "[1287] 'a slowest response of 0.924 seconds'. The agent knowingly ran within 80 ms of the deadline, so the forfeits are its own choice, not infrastructure",
+        "Without the forfeits (at its 53.6% rate) the score would be about 11, above Opus's 7.4 at $50",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "2ithii",
+      "wallet": 200,
+      "official_score": 3.07,
+      "official_review": "pass",
+      "approach": "Stratified opponent-set sampling, poke-engine MCTS and value-based selection reranked by a categorical value net trained from scratch on generated self-play (the Laplace-based finetunes were discarded).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'None of the logs in this chain inherits the Laplace checkpoint'",
+        "Final message [640]: 'maximum batch response 942 ms'; 0 timeout forfeits in grading",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "mqu25j",
+      "wallet": 10,
+      "official_score": 3.27,
+      "official_review": "pass",
+      "approach": "Foul Play / poke-engine MCTS with weighted visits. A small NumPy MLP distilled from MCTS on self-generated games is used only as a 1e-5 tiebreak and as the timeout fallback.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'POLICY_NET ... adds a 1e-5 tiebreak. The MLP argmax is the fallback on timeouts or exceptions'",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "3rg468",
+      "wallet": 50,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "Foul Play reconstruction plus poke-engine MCTS with deterministic seeded sampling. Raw 0.4963, clamped to 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: wins 1489 / losses 1511, within 0.5 SE of parity",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "59idzz",
+      "wallet": 200,
+      "official_score": 3.6,
+      "official_review": "pass",
+      "approach": "MCTS over stratified determinizations, scored by visit share + 0.30 x dq. Wins $200 at 3.6, within noise of Astra (3.07) and Opus (2.73). Wallet spend $0.68.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: 0.518, 1 opponent forfeit, paired SE 0.0084",
+        "The 27 'frontier-ml' hits are the local /opt/frontier-ml harness directory and /task/frontier_ml",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "4n26hl",
+      "wallet": 10,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "Foul Play parser, prior-sampled opponent teams, poke-engine MCTS picking by greedy policy mass, with a linear action_features fallback. Raw 0.485, clamped to 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: 1455 wins / 1545 losses",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "4ypkgp",
+      "wallet": 50,
+      "official_score": 6.13,
+      "official_review": "pass",
+      "approach": "Foul Play battle model with incremental LRU-cached reconstruction, belief sampling, and poke-engine MCTS in an 8-process pool with a per-batch capacity planner (880 ms internal deadline).",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Final message [612]: 'LRU keyed by (player, sorted own-team species), incremental prefix-checked updates, and full replay only on a miss'. It caches reconstruction only, not actions, so it is not a 'cached evaluation actions' violation",
+        "grade: 0.5307, 0 timeout forfeits",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "59vn26",
+      "wallet": 200,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "Foul Play state, sampled opponent sets, poke-engine MCTS with a 'random75' selection rule. Raw 0.4953, clamped to 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: 1486 wins, 1 opponent forfeit; wallet spend $0.80",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "q76m16",
+      "wallet": 10,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "Unmodified Foul Play with per-game sharded workers that advance the battle state incrementally, MCTS with deterministic argmax. Raw 0.492, clamped to 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'warmup_state.txt ... is used only to warm up the search and never to make a decision'",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "3oxwfl",
+      "wallet": 50,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "Foul Play with LRU-cached incremental reconstruction, 8 sampled hidden states and deterministic argmax over MCTS visit shares. 308 games were forfeited for responses over 1 s. Raw 0.430, clamped to 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: move_timeout_forfeits 308. Even counting those as 50% wins gives about 0.48 raw, still 0 after clamping",
+        "Final message [203]: 'Battles are rebuilt incrementally (LRU-cached by team/log fingerprint ...)'",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "5tdndb",
+      "wallet": 200,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "Foul Play with weighted hidden-set sampling in random_battles.py, plus forced/revival/search decision paths. Raw 0.4577, clamped to 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'The only behavioural change to the vendored code is weighted sampling of hidden sets'",
+        "All 4 reviewer checks pass (implementation provenance, actual served policy, permitted information, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    }
+  ]
+}

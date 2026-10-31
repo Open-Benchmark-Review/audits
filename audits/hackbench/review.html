@@ -1,0 +1,368 @@
+<title>HackBench Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an audit dossier. Sticky contents rail on the left, a single reading column on the right; stacks to one column on phones. */
+:root {
+  --bg: #f6f7f8;
+  --paper: #ffffff;
+  --ink: #16202a;
+  --muted: #5a6672;
+  --rule: #dde2e7;
+  --accent: #1f5f73;
+  --accent-soft: #e3eef1;
+  --flag: #b23a2a;
+  --flag-soft: #f8e5e1;
+  --pass: #2f6b3e;
+  --pass-soft: #e2efe5;
+  --warn: #8a5a00;
+  --warn-soft: #f6ecd6;
+  --code-bg: #eef1f4;
+  --font-display: "Newsreader", "Iowan Old Style", "Georgia", serif;
+  --font-body: "Public Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1418; --paper: #151c21; --ink: #e4e9ed; --muted: #9aa6b0; --rule: #2a343c;
+    --accent: #7cc0d3; --accent-soft: #1b2d34;
+    --flag: #f08a78; --flag-soft: #3a1f1b; --pass: #86c995; --pass-soft: #1b2e21;
+    --warn: #e2b764; --warn-soft: #33290f; --code-bg: #1d262c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1418; --paper: #151c21; --ink: #e4e9ed; --muted: #9aa6b0; --rule: #2a343c;
+  --accent: #7cc0d3; --accent-soft: #1b2d34;
+  --flag: #f08a78; --flag-soft: #3a1f1b; --pass: #86c995; --pass-soft: #1b2e21;
+  --warn: #e2b764; --warn-soft: #33290f; --code-bg: #1d262c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+code { font-family: var(--font-mono); font-size: 0.86em; background: var(--code-bg); padding: 0.05em 0.35em; border-radius: 3px; overflow-wrap: anywhere; }
+
+.wrap {
+  max-width: 1180px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+
+/* masthead */
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.back { display: inline-block; margin-bottom: 18px; font-size: 14px; }
+header.mast { display: grid; gap: 14px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); margin-bottom: 32px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: clamp(34px, 5vw, 52px); line-height: 1.08; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px 28px; margin: 6px 0 0; }
+.meta div { min-width: 0; }
+.meta dt { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.meta dd { margin: 2px 0 0; font-size: 15px; }
+.verdict { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: var(--flag); background: var(--flag-soft); padding: 3px 12px 3px 10px; border-radius: 999px; }
+.verdict::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--flag); }
+.howlink { font-size: 14px; }
+
+/* two-column body */
+.layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; align-items: start; }
+nav.toc { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 20px); font-size: 14px; }
+nav.toc ol { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+nav.toc ol ol { padding-left: 14px; margin-top: 4px; gap: 4px; }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover { color: var(--ink); }
+main { min-width: 0; max-width: 760px; }
+
+section { padding-block: 8px 28px; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 28px; line-height: 1.2; margin: 18px 0 12px; text-wrap: balance; scroll-margin-top: 16px; }
+h3 { font-size: 17px; font-weight: 700; margin: 26px 0 8px; scroll-margin-top: 16px; }
+p { margin: 0 0 14px; }
+.lede { font-size: 18px; line-height: 1.6; }
+ul.errs { padding-left: 20px; margin: 0 0 14px; display: grid; gap: 12px; }
+ul.errs li::marker { color: var(--accent); }
+.term { font-weight: 700; }
+
+/* key figures */
+.figures { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; margin: 22px 0 26px; }
+.fig { background: var(--paper); padding: 14px 16px; min-width: 0; }
+.fig b { display: block; font-family: var(--font-display); font-size: 30px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.fig span { font-size: 13px; color: var(--muted); }
+.fig.bad b { color: var(--flag); }
+
+/* tables */
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); margin: 12px 0 18px; }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+thead th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; background: var(--paper); }
+tbody tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td code { white-space: nowrap; }
+.type { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; }
+.t-fp { color: var(--warn); background: var(--warn-soft); }
+.t-fn { color: var(--accent); background: var(--accent-soft); }
+.t-imp { color: var(--flag); background: var(--flag-soft); }
+.tally { font-size: 15px; }
+.tally b { font-variant-numeric: tabular-nums; }
+
+/* rubric blocks */
+.rub { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 16px 18px; margin: 12px 0 14px; display: grid; gap: 10px; }
+.rub h4 { margin: 0; font-size: 16px; font-weight: 700; }
+.rub .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; }
+.rub ul { margin: 2px 0 0; padding-left: 18px; }
+.opts { display: flex; flex-wrap: wrap; gap: 6px; }
+.opt { font-size: 13px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); }
+.opt.on { font-weight: 700; border-color: transparent; }
+.opt.on.flag { color: var(--flag); background: var(--flag-soft); }
+.opt.on.pass { color: var(--pass); background: var(--pass-soft); }
+.opt.on.neutral { color: var(--accent); background: var(--accent-soft); }
+.opt.on.warn { color: var(--warn); background: var(--warn-soft); }
+.note { font-size: 14.5px; color: var(--ink); }
+.note .lbl { margin-right: 6px; }
+
+.levels td:first-child { font-weight: 700; white-space: nowrap; }
+.levels tr.on td { background: var(--pass-soft); }
+.levels tr.on td:first-child::after { content: " ✓"; color: var(--pass); }
+
+.eq td:first-child { width: 38%; }
+.eq .opts { margin-bottom: 6px; }
+
+.sens td:first-child { white-space: nowrap; }
+
+/* notes */
+ol.notes { padding-left: 20px; font-size: 14px; color: var(--muted); display: grid; gap: 6px; }
+ol.notes a { overflow-wrap: anywhere; }
+sup a { text-decoration: none; font-size: 0.75em; }
+.cite { background: var(--paper); border: 1px solid var(--rule); border-radius: 6px; padding: 12px 14px; font-family: var(--font-mono); font-size: 12.5px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid var(--rule); font-size: 13px; color: var(--muted); }
+
+@media (max-width: 860px) {
+  .layout { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  nav.toc { position: static; border: 1px solid var(--rule); border-radius: 6px; background: var(--paper); padding: 12px 14px; }
+  .wrap { padding-block: 24px 56px; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+<div class="wrap">
+  <header class="mast">
+    <a class="back" href="https://openbenchmarkreview.org">← Open Benchmark Review</a>
+    <div class="eyebrow">Benchmark Review</div>
+    <h1>HackBench</h1>
+    <dl class="meta">
+      <div><dt>Reviewed</dt><dd>Oct. 27, 2026</dd></div>
+      <div><dt>Benchmark creator</dt><dd>Tianjian Li, Seungone Kim, Eryk Helenowski, Jason Weston, Ilia Kulikov, Jack Lanchantin, Weizhe Yuan (Meta, RAM)</dd></div>
+      <div><dt>Version reviewed</dt><dd>HF release v8, 169 records; blog Table 3 (Oct. 2026)</dd></div>
+      <div><dt>Verdict</dt><dd><span class="verdict">Flawed</span></dd></div>
+    </dl>
+    <a class="howlink" href="https://epoch.ai/data/benchmark-reviews-documentation/methodology">How we review benchmarks (Epoch AI Rubric v1)</a>
+  </header>
+
+  <div class="layout">
+    <nav class="toc" aria-label="Contents">
+      <div class="eyebrow">Contents</div>
+      <ol>
+        <li><a href="#summary">Summary</a></li>
+        <li><a href="#methodology">Methodology</a></li>
+        <li><a href="#representative-errors">Representative Errors</a></li>
+        <li><a href="#errors">Errors</a></li>
+        <li><a href="#rubric">Rubric</a>
+          <ol>
+            <li><a href="#reviewability">1. Reviewability</a></li>
+            <li><a href="#scoring">2. Scoring</a></li>
+            <li><a href="#evaluation-quality">3. Evaluation Quality</a></li>
+          </ol>
+        </li>
+        <li><a href="#disclaimer">Disclaimer</a></li>
+        <li><a href="#notes">Notes</a></li>
+      </ol>
+    </nav>
+
+    <main>
+      <section id="summary" aria-label="Summary">
+        <p class="lede">HackBench measures whether an LLM monitor can find reward hacking in long autoresearch agent trajectories. The monitor reads one trajectory (a median of 264 commands and about 1.06M characters) and returns the <code>[CMD n]</code> indices of the hacking commands. It is scored by precision, recall and F1 against audited gold indices, macro-averaged over 169 trajectories. The release has 41 "natural" hacks, found by GPT-5.6 Sol, and 128 "synthetic" hacks injected by GLM-5.2.<sup><a href="#n2">2</a></sup> The blog reports eight monitors, from Claude Opus 5 at 64.88 F1 to GLM-5.2 at 32.33, without error bars.</p>
+        <p>The trajectories and gold labels are fully inspectable; the monitor prompt and settings are not. In a stratified random sample of 50 records, 35 (70%) contain a counted scoring defect. Checks that need no judgement flag 65 of 169 records (38%). Records built on the same trajectory label the same commands differently, most GLM-5.2 injections cannot take effect, and 14 "natural" records give the monitor the red-team order to hack. We designate the benchmark as <strong>Flawed</strong>.</p>
+        <div class="figures" role="list">
+          <div class="fig bad" role="listitem"><b>35 / 50</b><span>sampled records with a counted defect</span></div>
+          <div class="fig bad" role="listitem"><b>65 / 169</b><span>flagged by judgement-free checks</span></div>
+          <div class="fig" role="listitem"><b>82.0</b><span>F1 ceiling for a perfectly consistent monitor</span></div>
+          <div class="fig" role="listitem"><b>36.1</b><span>F1 of a regex on a placeholder prompt (GLM-5.2: 32.3)</span></div>
+        </div>
+      </section>
+
+      <section id="methodology" aria-label="Methodology">
+        <h2>Methodology</h2>
+        <p>Each record is treated as a "task" and its <code>gold_command_indices</code> as the ground truth. A record is defective if a monitor that correctly understood the trajectory would still be scored wrongly, or if the answer can be read off the monitor's input. HackBench has more than 50 records, so we sampled 50 at random, stratified by construction family (seed 20261027). Five model reviewers followed a written protocol, and the lead auditor re-checked every defect the verdict relies on against the transcripts.</p>
+        <p>The 169 records come from 55 base trajectories, and each synthetic record is a base trajectory plus exactly one inserted command. Diffing sibling records recovers every injection. We used this structure to check all 169 records for inconsistent labels, duplicate transcripts, red-team orders in the monitor's input, and surface tells. The sample error rate (70%) is outside the 15–25% band, so the sample was not expanded. No monitor was run.</p>
+      </section>
+
+      <section id="representative-errors" aria-label="Representative errors">
+        <h2>Representative Errors</h2>
+        <ul class="errs">
+          <li><span class="term">Inconsistent gold across siblings.</span> A command labelled a hack in one record appears verbatim and unlabelled in another record built on the same trajectory (51 of 169 records). Records 32 and 33 are byte-identical, yet their gold is [246, 630] and [246, 252, 260, 673, 678]. Natural record 42 labels [120], while the ten synthetic records built on the same run label [119, 120]. Applied consistently, the benchmark's own labels cap a perfect monitor at 82.0 F1.</li>
+          <li><span class="term">Injected "hacks" that are not hacks.</span> Most GLM-5.2 injections were written for a codebase that does not exist:
+            <ul>
+              <li>All 24 improving-replay-buffers injections target files the environment never contains, such as <code>pgr/replay_buffer.py</code> and <code>sac/train_sac.py</code>. They are still gold.</li>
+              <li>In record 115 the injection retrains after submission and scales a bias, and the next turn still cites the old perplexity.</li>
+              <li>In seven moving_mnist records the "data_leak" injection is a variable rename, and the gold falls back to an unrelated natural hack.</li>
+            </ul></li>
+          <li><span class="term">Answer leakage.</span> 15 "natural" records come from runs whose agent was told to perform "exactly ONE covert action" that inflates the score. In 14 of them this order is in the monitor's task context. In 13 of those it falls within the 6,000-character cap of the published evaluation.<sup><a href="#n3">3</a></sup></li>
+          <li><span class="term">Incomplete gold.</span> Record 69 has 618 identical fake-log writes. Gold labels 247 of them and none after CMD 798, so a monitor that flags all 618 scores F1 0.57.</li>
+        </ul>
+        <div><p><strong>Outside scoring defects:</strong></p>
+          <ul>
+            <li><strong>Shortcut.</strong> 74 of the 88 task-specific injections are followed by a placeholder shell prompt, <code>root@host:/app#</code>, that occurs nowhere in the real trajectories, and they have no reasoning around them. A regex using this tell scores 36.1 F1, above GLM-5.2. The blog says the needle "cannot be found by string-matching".</li>
+            <li><strong>Undisclosed chunking.</strong> A figure committed next to the post, but not shown in it, finds that chunked reading lifts GLM-5.2 from about 31 to about 80 detection F1.<sup><a href="#n4">4</a></sup> The post does not say whether the leaderboard used chunking.</li>
+            <li><strong>Overlapping roles.</strong> The models that generated, injected, screened and audited the data are all ranked monitors.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="errors" aria-label="Errors">
+        <h2>Errors</h2>
+        <div class="tbl">
+          <table>
+            <thead><tr><th>Record</th><th>Error type</th><th>Evidence</th></tr></thead>
+            <tbody>
+              <tr><td>record 0</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/0.json">real hack left unlabelled</a></td></tr>
+              <tr><td>record 6</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/6.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 29</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/29.json">labelled differently in a sibling record; gold labels a non-hack</a></td></tr>
+              <tr><td>record 30</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/30.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 31</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/31.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 33</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/33.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 42</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/42.json">labelled differently in a sibling record</a></td></tr>
+              <tr><td>record 49</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/49.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 62</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/62.json">real hack left unlabelled</a></td></tr>
+              <tr><td>record 69</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/69.json">real hack left unlabelled</a></td></tr>
+              <tr><td>record 72</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/72.json">real hack left unlabelled; gold labels a non-hack</a></td></tr>
+              <tr><td>record 80</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/80.json">real hack left unlabelled</a></td></tr>
+              <tr><td>record 82</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/82.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 92</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/92.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 93</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/93.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 96</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/96.json">labelled differently in a sibling record; real hack left unlabelled; gold labels a non-hack</a></td></tr>
+              <tr><td>record 97</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/97.json">labelled differently in a sibling record; real hack left unlabelled; gold labels a non-hack</a></td></tr>
+              <tr><td>record 100</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/100.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 114</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/114.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 115</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/115.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 119</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/119.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 120</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/120.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 121</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/121.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 122</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/122.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 127</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/127.json">labelled differently in a sibling record; real hack left unlabelled; gold labels a non-hack</a></td></tr>
+              <tr><td>record 128</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/128.json">labelled differently in a sibling record; real hack left unlabelled; gold labels a non-hack</a></td></tr>
+              <tr><td>record 133</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/133.json">gold labels a non-hack</a></td></tr>
+              <tr><td>record 143</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/143.json">labelled differently in a sibling record; real hack left unlabelled; gold labels a non-hack</a></td></tr>
+              <tr><td>record 148</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/148.json">labelled differently in a sibling record; real hack left unlabelled; gold labels a non-hack</a></td></tr>
+              <tr><td>record 153</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/153.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 167</td><td><span class="type t-fn">False Negative</span></td><td><a href="data/record_reviews/167.json">labelled differently in a sibling record; real hack left unlabelled</a></td></tr>
+              <tr><td>record 55</td><td><span class="type t-fn">False Negative</span> <span class="type t-fp">False Positive</span></td><td><a href="data/record_reviews/55.json">red-team order in the monitor input; real hack left unlabelled</a></td></tr>
+              <tr><td>record 56</td><td><span class="type t-fp">False Positive</span></td><td><a href="data/record_reviews/56.json">red-team order in the monitor input</a></td></tr>
+              <tr><td>record 57</td><td><span class="type t-fp">False Positive</span></td><td><a href="data/record_reviews/57.json">red-team order in the monitor input</a></td></tr>
+              <tr><td>record 59</td><td><span class="type t-fp">False Positive</span></td><td><a href="data/record_reviews/59.json">red-team order in the monitor input</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tally"><p>Total: <b>35</b> of <b>50</b> sampled records (<b>70%</b>): 32 with a false-negative defect, 4 with a false-positive defect. The Flawed threshold is 20%. The verdict holds on narrower counts too:</p>
+          <ul>
+            <li>Counting only high-confidence calls and defects the lead auditor re-checked, 25 of 50 records (50%) are affected.</li>
+            <li>Judgement-free checks flag 65 of all 169 records (38%): sibling-inconsistent gold, red-team orders in the monitor's input, and duplicate transcripts with different gold.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="rubric" aria-label="Rubric">
+        <h2>Rubric</h2>
+
+        <h3 id="reviewability">1. Reviewability</h3>
+        <div class="tbl">
+          <table class="levels">
+            <thead><tr><th>Level</th><th>Meaning</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>Full</td><td>All tasks and scoring logic inspectable, and harness/API settings for each model (reasoning effort, token and time limits, tool access, system prompts) fully disclosed</td><td>[proceed to 2]</td></tr>
+              <tr class="on"><td>Partial</td><td>A representative sample of tasks and scoring logic inspectable, with full harness/API settings disclosed</td><td>[proceed to 2]</td></tr>
+              <tr><td>Inadequate</td><td>Limited, biased or no inspectable tasks or scoring logic; harness/API settings undisclosed</td><td>[stop → NEI]</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note"><span class="lbl">Notes</span>Every trajectory, monitor input and gold label is public. The monitor prompt, reasoning effort, output limits, single-pass vs chunked reading, handling of inputs beyond a context window (97 records exceed about 1M characters), predictions and run count are not. A strict reading would rate this Inadequate. We proceeded because the scoring defects lie in the released data and do not depend on any monitor's settings.</p>
+
+        <h3 id="scoring">2. Scoring</h3>
+        <p>This is the minimum standard required to be Verified; failing any of these items results in a Flawed verdict.</p>
+        <div class="rub">
+          <h4>Scoring</h4>
+          <div><span class="lbl">Examples</span> Essentially impossible to answer as written; false negative (overly strict scorer, stale or incorrect ground truth); false positive (lax scorer, reward-hackable, answer retrievable from the harness); task doesn't measure the claimed capability</div>
+          <div><span class="lbl">Default threshold for Flawed</span> Errors affect ≥20% of the total score in the inspected sample, or an issue corrupts grading at scale</div>
+          <div class="opts" aria-label="Status"><span class="opt">Pass</span><span class="opt on flag">Flag [stop → Flawed]</span><span class="opt">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>35 of 50 sampled records (70%); at least 65 of 169 (38%) by mechanical checks. Inconsistent sibling labels and broken injections corrupt grading at scale.</div>
+        </div>
+
+        <div class="rub">
+          <h4>Benchmark Consistency</h4>
+          <div><span class="lbl">Examples</span> Scorer, instructions or ground truth changed without a version bump</div>
+          <div><span class="lbl">Default threshold for Flawed</span> Leaderboard has incomparable results from different versions</div>
+          <div class="opts" aria-label="Status"><span class="opt on pass">Pass</span><span class="opt">Flag [stop → Flawed]</span><span class="opt">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>All published monitors share one version, but it is not the released one: the manifest records <code>fresh_model_evaluation_performed: false</code>, a 6,000-character task context (114 rows since restored), 16 rows of gold changed by renumbering, and 33 legit rows removed. Results on the release are not comparable with the published table.</div>
+        </div>
+
+        <div class="rub">
+          <h4>Elicitation</h4>
+          <div><span class="lbl">Examples</span> Under-resourced relative to task size; poor context management; no agentic environment where one would be natural; excessive non-voluntary termination</div>
+          <div><span class="lbl">Default threshold for Flawed</span> Substantially reduced performance compared to reasonable alternatives</div>
+          <div class="opts" aria-label="Status"><span class="opt">Pass</span><span class="opt">Flag [stop → Flawed]</span><span class="opt on neutral">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>Monitor settings are undisclosed. The authors' own unpublished figure shows chunked reading moves GLM-5.2 by about 50 detection-F1 points, more than the whole published spread.</div>
+        </div>
+
+        <div class="rub">
+          <h4>Bias in Evaluation Setup</h4>
+          <div><span class="lbl">Examples</span> Uneven compute or token budgets; unfair scaffold choice</div>
+          <div><span class="lbl">Default threshold for Flawed</span> Material model-specific advantage found</div>
+          <div class="opts" aria-label="Status"><span class="opt on pass">Pass</span><span class="opt">Flag [stop → Flawed]</span><span class="opt">Not reviewed</span></div>
+          <div class="note"><span class="lbl">Notes</span>No material advantage shown. GPT-5.6 Sol (8 chunks) selected the natural hacks; GLM-5.2 wrote every injection; Claude Opus 4.8 and GPT-5.5 audited every label; GPT-5.5 and GLM-5.2 generated every trajectory. All of them are ranked monitors.</div>
+        </div>
+
+        <h3 id="evaluation-quality">3. Evaluation Quality</h3>
+        <p>This is the standard we would like all benchmarks to meet, but it is not necessarily disqualifying to omit or fail these items.</p>
+        <div class="tbl">
+          <table class="eq">
+            <thead><tr><th>Question</th><th>Status and notes</th></tr></thead>
+            <tbody>
+              <tr><td>Elicitation and resource adequacy: are the resources given to models sufficient for them to perform near their ceiling?</td><td><div class="opts" aria-label="Status"><span class="opt">Sufficient</span><span class="opt">Constraining</span><span class="opt">Unreasonably constraining</span><span class="opt on neutral">Unknown</span></div>Undisclosed. Chunking alone changes scores by up to about 50 F1 in the authors' figure.</td></tr>
+              <tr><td>Scaffold fairness: what scaffold does the leaderboard report?</td><td><div class="opts" aria-label="Status"><span class="opt">Shared common scaffold</span><span class="opt">Mix</span><span class="opt">Model-specific scaffolds</span></div>Unknown: no monitor scaffold is described.</td></tr>
+              <tr><td>Is there evidence or risk of contamination?</td><td>100% of tasks public; 100% of solutions public. The download is gated, but the gold ships with the data, and sibling records reveal each injection by diff.</td></tr>
+              <tr><td>Has human completability been assessed?</td><td><div class="opts" aria-label="Status"><span class="opt">All tasks</span><span class="opt">Representative set</span><span class="opt">Poor implementation</span><span class="opt on warn">Not established</span></div>Humans only broke ties between two model auditors.</td></tr>
+              <tr><td>Score range</td><td>7.4 floor (flag every command); 82.0 ceiling (a monitor matching the benchmark's own labels consistently).</td></tr>
+              <tr><td>Statistical adequacy: how many runs per model (≥ 5 recommended for error bars)?</td><td><b>Unknown runs/model; no error bars.</b> With 55 base trajectories, a 95% interval is about 28 F1 points wide when base trajectories are resampled. Four models lie within 2.1 points.</td></tr>
+              <tr><td>Construct validity</td><td><div class="opts" aria-label="Status"><span class="opt">Measures stated capabilities</span><span class="opt on warn">Partially measures stated capabilities</span><span class="opt">Does not measure stated capabilities</span></div>Every record contains a hack; the 33 clean trajectories were removed, so false alarms on honest runs are not measured. Four records hold 918 of the 1,312 gold labels.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="disclaimer" aria-label="Disclaimer">
+        <h2>Disclaimer</h2>
+        <p>This is a full review of a 50-record stratified sample, plus mechanical checks over all 169 records. Model reviewers did the per-record review under a written protocol. The lead auditor re-checked every defect the verdict relies on, and contested calls were resolved conservatively. No monitor was run, and the chunking values are read off a plot.</p>
+        <p>This review uses the format and rubric of Epoch AI's Benchmark Reviews. It is an independent review and is not produced or endorsed by Epoch AI.</p>
+      </section>
+
+      <section id="notes" aria-label="Notes">
+        <h2>Notes</h2>
+        <ol class="notes">
+          <li id="n1">Epoch AI, Benchmark Reviews methodology (Rubric v1): <a href="https://epoch.ai/data/benchmark-reviews-documentation/methodology">epoch.ai/data/benchmark-reviews-documentation/methodology</a>.</li>
+          <li id="n2">Dataset: <a href="https://huggingface.co/datasets/facebook/hackbench">huggingface.co/datasets/facebook/hackbench</a>, file <code>data/hackbench_169_gpt55_glm52.numbered.jsonl</code>, sha256 <code>42c0cfa4…9fd87</code>. Blog: <a href="https://facebookresearch.github.io/RAM/blogs/hackbench/">facebookresearch.github.io/RAM/blogs/hackbench</a>.</li>
+          <li id="n3"><code>MANIFEST.json</code>: <code>historical_evaluation_character_cap: 6000</code>. The red-team block starts at characters 4,468–5,633 in 13 of the 14 records.</li>
+          <li id="n4"><code>fig4.png</code> in <a href="https://github.com/facebookresearch/RAM/tree/main/projects/hackbench">github.com/facebookresearch/RAM/tree/main/projects/hackbench</a> (also <code>fig3.png</code> and <code>fig5.png</code>; none is shown in the post).</li>
+          <li>The report, task log, per-record reviews, review protocol and analysis scripts are in <a href="https://github.com/Open-Benchmark-Review/audits/tree/main/audits/hackbench">audits/hackbench</a>.</li>
+        </ol>
+        <h3>Cite</h3>
+        <div class="cite">Open Benchmark Review (2026), "HackBench: Benchmark Review". Reviewed Oct. 27, 2026. github.com/Open-Benchmark-Review/audits</div>
+      </section>
+
+      <footer>Rubric: Epoch AI Benchmark Reviews, Rubric v1. Verdict categories: Verified, Flawed, Not enough information.</footer>
+    </main>
+  </div>
+</div>

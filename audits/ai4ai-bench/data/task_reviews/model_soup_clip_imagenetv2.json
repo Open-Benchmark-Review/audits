@@ -1,0 +1,507 @@
+{
+ "task": "model_soup_clip_imagenetv2",
+ "task_level": {
+  "rubric_code": "CONSTRUCT",
+  "confirmed": true,
+  "counted_toward_threshold": true,
+  "hidden_data_integrity": [
+   "The proxy is a strict subset of the final. ImageNetV2 matched-frequency has exactly 10,000 images (1,000 classes x 10). The proxy is offsets 0-1 (2,000 images) and the final is offsets 0-9 (all 10,000), so 20% of the final rows are proxy rows (harness/grade.py:60-61; harness/final_eval.py:15-18 'the proxy is now *inside* the final -- 2000 of the 10000 rows are the ones the Agent tuned on'; environment/assets.lock.yaml:161-174 'derived_from: data/imagenetv2_final'; declaration.py:36-37, 172-174).",
+   "Proxy labels are visible: the class directory name is the label (grade.py:68-91). The proxy is mounted in both explore and formal retrain (declaration.py:83, 109-113; assets.lock.yaml:174), so every formal recipe searches coefficients on the same 2,000 labelled rows that make up 20% of the score. The other 8,000 rows and their labels are mounted only at scoring (declaration.py:174; assets.lock.yaml:150). No case page found final-only identifiers in any trajectory.",
+   "Proxy-to-final leakage, measured from the case pages' own split diagnostics. Best artifacts score 0.001-0.003 higher on the full set than on the unseen 8,000 rows. For the uniform soup the difference is only +0.0005 (uniform: full 0.6859, proxy 0.688, unseen 0.685375). So including the proxy rows inflates each cell's gain over the baseline by about 0.0015-0.0026 top-1, typically 20-30% of the gain: sonnet-5/max 17%, luna/low 22%, opus/low 22%, terra/medium 31%. That is about 0.005-0.008 sigma per cell. In luna/high and sol/none, best-of-3 selection between checkpoints is decided entirely by proxy-overlap rows.",
+   "network_mode = 'no-network' (task.toml:32); retrain and score use --network=none (orchestrator/container.py:216-230); explore reaches only the model API (orchestrator/egress.py:1-4).",
+   "ImageNetV2 is public with a direct download URL (assets.lock.yaml:128-135), and the 72 ingredients are the public model-soups release (task.toml:44). Agents could in principle recall the published greedy-soup recipe, but nothing in the case pages suggests use, and the shipped soup.py already implements strict greedy."
+  ],
+  "scorer_issues": [
+   "The artifact gate exists and is real. soup_check solves for the checkpoint's coefficients against all 72 ingredients and rejects residual/norm > max(1e-6, 10 x the honest float32 reference) (harness/soup_check.py:118-119, 301-306). A violation writes status 'invalid' with no reward (harness/final_eval.py:160-183). Every cell's artifacts passed. Extrapolative and negative coefficients are explicitly allowed (instruction.md:25).",
+   "The evaluator docstring says 'v1 takes the last checkpoint and has no selection step' (final_eval.py:9-10). The orchestrator actually takes the best of up to 3 on the final (orchestrator/final_score.py:147-150; task.toml:19). With the proxy inside the final, this adds a second selection on the scored rows. Internal documentation inconsistency.",
+   "No training: the task selects or weights frozen checkpoints (declaration.py:3-6 'There is no training loop anywhere in it'; instruction.md:25). This matches the paper."
+  ],
+  "anchor_issues": [
+   "Baseline 0.686 is the shipped uniform soup (0.6859, instruction.md:36). The case pages' 'fixed start' is model_69 at 0.6874, which is above the paper baseline. Submitting the shipped best_single option therefore scores sigma 0.104 > 0.1, a 'win' that the task itself calls 'a statistical tie, not a demonstrated regression' (instruction.md:42).",
+   "Optimum 1.0 (100% ImageNetV2 top-1) is unreachable for ViT-B/32 soups. The realistic ceiling is about 0.70-0.71, so sigma = 0.1 + 0.9*(x - 0.686)/0.314 confines every result to about 0.10-0.15. The 28 scored cells span 0.6918-0.7006, i.e. sigma 0.117-0.142.",
+   "The shipped code already contains strict_greedy (solution/run.sh:29-33; solution/soup.py:63). Setting SELECTION_RULE=strict_greedy gives 0.6936 = sigma 0.122, the score of 10 of 28 scored cells to within 0.0001, just under the median (0.6939). The task's sigma mostly measures whether the agent switched on the shipped greedy rule, plus noise."
+  ],
+  "noise": "Class-clustered SE on the full 10,000 rows is about 0.0067 (grade.py:120-161; case pages). Paired SE against the references is about 0.0023-0.0025 (terra/low, luna/none pages). The 28 scored configurations span 0.6918-0.7006: 0.0088 top-1, about 1.3 marginal SE or about 3.5 paired SE end-to-end. The median cluster (0.6935-0.6942, 16 cells) is separated by at most 7 images, far inside the noise. Only sol/max (0.7006), sonnet-5/max and low (0.6985/0.6983) and sol/high (0.6972) stand meaningfully above the shipped-greedy level, and their margins (0.004-0.007) are comparable to the proxy-overlap inflation (about 0.002) plus best-of-3 selection. In sigma units, all configuration differences in this task are 0.025 or less.",
+  "checkpoint_selection": "Best of up to 3 on the final metric (orchestrator/final_score.py:147-150). In 12 of 28 scored cells the official checkpoint is not the last: opus/low, max, medium; sonnet/medium; kimi/max; luna/high, max, xhigh; sol/low, max, medium; terra/max. The mean gain over the last checkpoint is +0.0025 sigma per cell (0.1204 vs 0.1179); the largest are opus/low (+0.014) and opus/medium (+0.0135). No beat-the-baseline outcome flips, because every scored artifact except an exported uniform control sits at or above 0.6874. Because 20% of the final rows are proxy rows, part of this selection is selection on the proxy rows themselves (luna/high, sol/none).",
+  "evidence": [
+   "tasks/model_soup_clip_imagenetv2/harness/grade.py:60-61 PROXY_OFFSETS = (0, 1); FINAL_OFFSETS = range(10)",
+   "tasks/model_soup_clip_imagenetv2/harness/final_eval.py:15-18 proxy inside final (2,000 of 10,000 rows)",
+   "tasks/model_soup_clip_imagenetv2/harness/final_eval.py:9-10 'takes the last checkpoint and has no selection step' (contradicted by orchestrator/final_score.py:147-150)",
+   "tasks/model_soup_clip_imagenetv2/environment/assets.lock.yaml:161-174 proxy derived_from final, phases [explore, retrain]; :150 final phases [score]",
+   "tasks/model_soup_clip_imagenetv2/declaration.py:3-6 no training loop; :109-113 proxy mounted in formal retrain; :172-174 final includes proxy rows",
+   "tasks/model_soup_clip_imagenetv2/task.toml:45-46 proxy 2,000 / final 10,000; :32 no-network",
+   "tasks/model_soup_clip_imagenetv2/instruction.md:31-42 start model_69 0.6874, uniform 0.6859, 'statistical tie'",
+   "tasks/model_soup_clip_imagenetv2/solution/run.sh:29-33, solution/soup.py:63 shipped strict_greedy option",
+   "tasks/model_soup_clip_imagenetv2/harness/soup_check.py:118-119, 301-306; harness/final_eval.py:160-183 affine-hull gate",
+   "audits/ai4ai-bench/scripts/score.py:26 anchors (0.686, 0, 1, x)"
+  ],
+  "summary": "Model Soup does no training: agents search coefficients over 72 frozen CLIP fine-tunes. The leads are confirmed. The 2,000 proxy rows (offsets 0-1, labels visible, mounted in both exploration and formal replay) are a strict subset of the 10,000 final rows (offsets 0-9 of ImageNetV2's 10,000 images). Proxy-tuned coefficients therefore carry about 0.002 of unearned top-1 into the final, roughly 20-30% of each cell's gain over the baseline, and in two cells best-of-3 is decided purely by proxy-overlap rows. The affine-hull gate is real and the 8,000 final-only rows were not exposed. The decisive problem is the scale. The paper baseline (uniform, 0.686) sits below the stated start (model_69, 0.6874), and the optimum of 100% is unreachable, so sigma is confined to 0.10-0.15. All 28 scored cells land at 0.117-0.142, and 10 of them are within 0.0001 of the shipped strict_greedy option (0.6936, sigma 0.122). Configuration differences are inside noise and contribute at most 0.0025 to any configuration's 10-task mean. No cell is a false positive or false negative. The task's sigma does not measure the claimed capability, so we code CONSTRUCT (confirmed). It counts toward the threshold because the proxy-in-final overlap is a confirmed defect that changes every scored cell, but its absolute effect is small (about 0.006 sigma per cell; Soup is about 7% of total benchmark sigma)."
+ },
+ "cells": [
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 0.6935,
+   "approach": "Learned affine soup: the 72 sum-one coefficients (negatives allowed) are fit by cross-entropy distillation of a proxy-label-ranked top-K teacher ensemble, with CV and bootstrap fits. Best is the last checkpoint (proxy 0.7015, unseen 8,000 rows 0.6915).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'proxy-label ingredient ranking -> top-K mean softmax teacher -> cross-entropy/Adam -> 72 sum-one coefficients, negatives allowed'",
+    "case page: 'Best 9003 scores 0.7015 on proxy rows and 0.6915 on the additional 8,000'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 0.6961,
+   "approach": "Gradient-learned affine coefficients: Adam on proxy cross-entropy with a mean-gradient projection, step and shrink chosen by split-half CV. Used 3.5% of the formal budget. Official best is artifact-5 (unseen rows 0.693375), not the last (0.6911).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Frozen CLIP proxy cross-entropy supplies Adam gradients; subtracting the mean gradient preserves the affine constraint'",
+    "case page: 'Artifact-4 scored 0.6959 ... artifact-5 0.6961 ... artifact-6 0.6911 ... the 8,000 non-overlap scores were 0.693625, 0.693375, and 0.688375'",
+    "best-of-3 on the final adds +0.014 sigma over the last checkpoint, the largest in this task"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 0.6936,
+   "approach": "Strict greedy soup plus bootstrap-bagged greedy variants (accuracy and NLL acceptance) with nonnegative normalized coefficients. Official best is progress 20, not the last (0.6926).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Branch A ranks ingredients by full-proxy accuracy and keeps an equal-weight addition only when accuracy strictly improves. B bootstraps proxy rows'",
+    "case page: 'they scored 0.6936 +- 0.006761, 0.6933 +- 0.006694, and 0.6926'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 0.6959,
+   "approach": "Repeated five-fold fitting of 12 coefficient rules (accuracy, cross-entropy, KL to in-task teacher logits), with bagged 60-step affine coefficients selected by out-of-fold score. Official best is progress 2, not the last (0.6912).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'repeated five-fold fitting of 12 rules ... greedy/Adam updates only 72 sum-one coefficients'",
+    "case page: 'progress 2 bagged 60-step affine scored 0.6959 ... progress 4 all-row repeated greedy scored 0.6912'; proxy 0.7030, so the unseen-row score is about 0.6941",
+    "best-of-3 adds +0.0135 sigma"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 0.6959,
+   "approach": "Rule comparisons on repeated fit/held splits, then an all-row refit of three mechanism families. The greedy-extrapolation soup is best and last (unseen rows 0.693875).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'stable-greedy 37956 scored 0.6877 ... top-five 37957 scored 0.6895 ... greedy-extrapolation 37958 scored 0.6959 ... other-8,000 scores were 0.685375, 0.688750, and 0.693875'",
+    "the structured field reads 'Protocol exposure: Confirmed', but the page's prose reports no protocol exposure; we find none (final-only rows are not mounted before scoring)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 0.6942,
+   "approach": "Repeated 500/500 class-split greedy reranking; inclusion frequencies define threshold soups, chosen by internal holdout. Best is the final 10-ingredient equal-weight soup (unseen rows 0.693125).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'repeatedly splits 1,000 classes into 500 search and 500 holdout classes, reranks ingredients, and accepts equal-weight additions only when true proxy-label accuracy improves'",
+    "case page: 'Its proxy subset was 0.6985 while the 8,000 nonproxy rows were 0.693125'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 0.6983,
+   "approach": "Half-constrained greedy with class-bootstrap restarts (accept only if neither proxy half declines). Rebuilds the exploration-best four-model soup; all three checkpoints are the same coefficients.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'accept only higher aggregate top-1 with neither half declining'",
+    "case page: 'All represent the same coefficients and proxy result, 0.708 overall and 0.700/0.716 by half'; cases.json: all three 0.6983"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 0.6985,
+   "approach": "Exhaustive pairs, then random-restart hill climbing with coordinate refinement of positive weights, ranked by worse-fold-first accuracy on two proxy folds. Best is the last (proxy 0.709, unseen rows 0.695875).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'candidates are compared lexicographically by (worse fold, overall accuracy)'",
+    "case page: 'Its visible-proxy/final-only scores were 0.709/0.695875, showing selection overfit'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 0.6927,
+   "approach": "A/B cross-fit: fit best-single and greedy on one half, pick a 0.1-grid blend with uniform on the other, reverse, and average the coefficient vectors. Official best is progress 40551, which ties progress 41543 and is one image above the last.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'on B select a 0.1-grid convex blend of the A-selected single, A-trained greedy soup, and uniform -> reverse halves -> average'",
+    "case page: '0.6927 +- 0.006735, 0.6927 +- 0.006731, and 0.6926'; proxy 0.6930-0.6935, so the unseen-row score is about 0.6925"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 0.6936,
+   "approach": "Publishes best-single (0.6874) and strict greedy, then a bagged consensus. Formal replay picked strict greedy for checkpoint 3 as well, so the official 0.6936 equals the shipped strict_greedy option.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Formal replay actually selected strict greedy for checkpoint 3, not the bagged consensus'",
+    "shipped option: tasks/model_soup_clip_imagenetv2/solution/run.sh:29-33 and solution/soup.py:63 (RULES = uniform, best_single, strict_greedy)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__model_soup_clip_imagenetv2__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 0.6935,
+   "approach": "Greedy, top-12 distillation and softmax-coefficient CE learning, selected across 52 shared holdouts. The first checkpoint (greedy) is the official best; the last (CE coefficients) scored 0.6924.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Formal replay ... published greedy, top-12/200-step distillation, then the best nonduplicate of seven methods across 52 shared holdouts'",
+    "the case page's 'Evaluation-boundary conduct: Confirmed' concerns an earlier patch outside official lineage; 'Result influence: None'. We agree"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 0.6943,
+   "approach": "Adam on 72 softmax coefficient logits (proxy CE + 0.1 L2 to uniform) over random class subsets. Exports full-proxy best, complementary-class best and a top-4 control. Checkpoints 100000 and 200000 tie on the unseen 8,000 rows (0.6925); the winner's 9 extra correct images all come from proxy rows.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: '100000 and 200000 both scored 0.6925 on the 8,000 search-invisible rows; all nine of the winner's additional correct predictions came from overlapping proxy rows'",
+    "so best-of-3 on a final that contains the proxy picks by proxy-row fit (+0.0009 top-1, about +0.0026 sigma). The gain over uniform on unseen rows is still real (0.6925 vs 0.6854)",
+    "the structured field reads 'Protocol exposure: Confirmed', but the page's prose reports no protocol exposure; we find none (final-only rows are not mounted before scoring)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": 0.6936,
+   "approach": "Runs the shipped soup.py strict_greedy rule (6 models: 69, 60, 63, 44, 34, 50), one checkpoint, 2.1% of the formal budget.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'existing soup.py supplied the algorithm'",
+    "case page: 'the proxy subset was 0.7025 ... the 8,000 proxy-excluded rows were 0.691375'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 0.6941,
+   "approach": "Enumerates equal-weight 2-4-way combinations among the top-18 ingredients by proxy accuracy and keeps the proxy top three. Official best is checkpoint 28962 (proxy rank 2), not the last (0.6912).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'enumerates equal 2-4-way combinations among the top 18'",
+    "case page: 'checkpoint-28961 scored 0.6939 ... checkpoint-28962 scored 0.6941 ... checkpoint-28963 scored 0.6912 ... Proxy ranks 1 and 2 reversed on full data'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 0.6936,
+   "approach": "Exports an emphasized top-4 soup, best-single and strict greedy. Greedy (0.6936) is best. Artifact 100 (0.6902) lacks a .complete receipt, which does not affect the result.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: '100, emphasized top-four | 0.6902 +- 0.006742 | Missing .complete; unofficial diagnostic only'",
+    "cases.json: 0.6902 / 0.6874 / 0.6936"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": 0.6937,
+   "approach": "Uniform, strict greedy, and a 50/50 blend of greedy with model_69. The shrunk soup is best by 0.0001 and is 0.0070 above uniform on the unseen 8,000 rows (paired SE 0.0025).",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Progress 3 remained 0.0070 above uniform on the 8,000 unseen rows; paired SE was 0.002491. Its full-set lead over progress 2 was only 0.0001 +- 0.001753'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 0.6924,
+   "approach": "Pair grids, top-six triple simplexes and seeded random convex mixtures, with the proxy top three exported. Official best is checkpoint 2 (proxy rank 2), not the last (0.6904).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Checkpoints 1/2/3 score 0.6912 ... 0.6924 ... and 0.6904 ... Proxy order 1>2>3 became final order 2>1>3'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 0.6972,
+   "approach": "Deterministic coefficient enumeration (pair simplex) over cached predictions, gated on pooled proxy accuracy plus a four-partition check. Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'pooled accuracy plus a four-partition gate, deterministic coefficient enumeration, then exact affine averaging'",
+    "cases.json: 0.6874 / 0.6947 / 0.6972"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 0.6941,
+   "approach": "Publishes 69/44 and two triad soups at startup, then an anchor-pair grid and perturbation search. No later result crossed the replacement threshold. Official best is checkpoint 2, not the last (0.6926).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'It immediately publishes 69/44, 69/44/63, and 69/44/59 soups ... no search result crossed the 0.706 replacement threshold'",
+    "cases.json: 0.6912 / 0.6941 / 0.6926"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 0.7006,
+   "approach": "Gradient-free coordinate searches on three train/validation splits of the proxy, bagged endpoints, and 12 finalists rebuilt and exact-scored. Official best is checkpoint 2 (0.7006, top of the task), not the last (0.6997).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'Training rows choose moves, held-out rows choose endpoints, and endpoints are bagged'",
+    "cases.json: 0.6924 / 0.7006 / 0.6997",
+    "the structured field reads 'Protocol exposure: Confirmed', but the page's prose reports no protocol exposure; we find none (final-only rows are not mounted before scoring)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 0.695,
+   "approach": "Signed coordinate proposals on coefficients, accepting lower proxy CE while proxy accuracy stays at or above 0.700, with magnitude and L1 constraints. Checkpoint 1 is best (tied with 2).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'uses permitted proxy labels for signed coordinate proposals, accepting lower cross-entropy while accuracy remains at least 0.700'",
+    "cases.json: 0.695 / 0.695 / 0.6946"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 0.694,
+   "approach": "Three hard-coded averages chosen in exploration (69/44, greedy-6, greedy-6 with model_63 at 2.5x), built in 53 s. Progress 300 beats 200 by 0.0004, entirely from four proxy-overlap images.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'progress 200 and 300 both score 0.691375 on the 8,000 non-proxy images; the entire 0.0004 full-score edge is four extra correct proxy-overlap images'",
+    "the selection among checkpoints is driven by proxy rows inside the final (+0.0011 sigma). Negligible, but a direct instance of the overlap"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 0.6918,
+   "approach": "Many search families (top-k, line, greedy, pairs, triads, sparse proposals) under paired-uncertainty guards. Publishes an anchor, a support-2 soup and a support-3 triad; the triad is best and last.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'Three role files publish the anchor, a support-at-most-two robust model, and a support-at-most-three general model'",
+    "cases.json: 0.6874 / 0.6906 / 0.6918",
+    "the structured field reads 'Protocol exposure: Confirmed', but the page's prose reports no protocol exposure; we find none (final-only rows are not mounted before scoring)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": 0.6937,
+   "approach": "Anchor-injection hill climbing (3-12% ingredient injections), with offset 0 used for selection and offset 1 as holdout. All three retained checkpoints are byte-identical (unseen rows 0.69225).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'missing deduplication made them byte-identical ... The final-only 8,000 rows scored 0.69225 +- 0.007117, while proxy rows scored 0.6995'",
+    "the structured field reads 'Protocol exposure: Confirmed', but the page's prose reports no protocol exposure; we find none (final-only rows are not mounted before scoring)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": 0.6936,
+   "approach": "Rank plus strict greedy over widths 1-49, then best-single and uniform controls. The best is the six-model greedy soup that the shipped strict_greedy option already produces.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'paired class-clustered gains for greedy are 0.0062 +- 0.00252 over best-single and 0.0077 +- 0.00228 over uniform. Greedy scored 0.7025 on the overlapping proxy rows and 0.691375 on the other 8,000'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 0.6936,
+   "approach": "Top-k, greedy, anchored, uniform-blend and soft-weight families, selected by repeated whole-class held-out CV. Exports start, full-proxy greedy and the CV winner. Greedy (0.6936) is best; the CV winner (last) scored 0.6911.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Clean formal replay exported the start, full-proxy greedy, and cross-validated winner'",
+    "cases.json: 0.6874 / 0.6936 / 0.6911; best-of-3 adds +0.0072 sigma"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 0.6942,
+   "approach": "Shrinking-step greedy coordinate search on the 72-dim mixture using proxy accuracy, plus uniform and model_69 controls. The coordinate soup is best and last.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'coordinate search at publication 3 scored 0.6942 ... Proxy scores were 0.6880, 0.6935, and 0.7065 ... On the 8,000 rows excluded from selection, however, its 0.00525 advantage had CI -0.00134-0.01184'",
+    "the full-set gain over model_69 is significant only with the overlapping proxy rows included. About 31% of its gain over uniform comes from proxy rows"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": null,
+   "approach": "Agent exited after about 99 s with an empty patch: the greedy choice existed only in shell settings. No formal run and no score; scored sigma 0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Exploration failed through agent_early_exit after about 99 seconds with 14,340 seconds left; there was no normal submission, only host capture of an empty patch'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__model_soup_clip_imagenetv2__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 0.6938,
+   "approach": "Strict greedy plus half-guarded affine interpolation, with three exports. The interpolated soup is best and last.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'strict greedy and half-guarded affine interpolation choose coefficients'",
+    "cases.json: 0.6874 / 0.6936 / 0.6938"
+   ],
+   "confidence": "high"
+  }
+ ]
+}

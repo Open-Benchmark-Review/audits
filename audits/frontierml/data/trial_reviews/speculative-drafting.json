@@ -1,0 +1,337 @@
+{
+ "task": "speculative-drafting",
+ "task_level": {
+  "spec_issues": [
+   "The rules are clear and the reviewer rubric matches the prompt (tests/task/review.py:14-54): any non-specialist base, training on the target's own continuations for other prompts, and use of the shipped public examples are allowed. EAGLE/Medusa initialisation, continuation lookup and held-out data are forbidden. Selecting on the 40 public examples is allowed by the rubric (review.py:17-18).",
+   "review.py:19-21 records that the held-out conversations are in a publicly readable Hugging Face folder (inductionlabs/frontier-ml-tasks, speculative-drafting/private). I searched all 18 trajectories for frontier-ml-tasks, inductionlabs/frontier, frontierml.org and the GitHub repo: no trial touched them. The only hits are the local /opt/frontier-ml Spin client package.",
+   "The 1,000,000,000-byte cap is the binding constraint. All 18 trials started from Qwen3-1.7B, distilled it on Qwen3-8B greedy continuations, and packed it to about 4 to 5 bits. Argon 4a9bxl saw AngelSlim/Qwen3-1.7B_eagle3 in a search listing [58] but never downloaded it."
+  ],
+  "verifier_issues": [
+   "Score = (tau - 4.6) / 2.4, clamped (tests/task/task.yaml:51-61). The floor of 4.6 is untouched Qwen3-1.7B with 4-bit linears, which is the obvious first submission. The ceiling of 7 is an owner-set target, not a measured model. The scale is therefore steep: 0.1 of tau is 4.2 points.",
+   "The replay is deterministic greedy verification against stored target continuations, so grading noise is negligible. Public-to-held-out tau gaps are small for most trials (Opus 1qhhnj 5.52 -> 5.49; Astra fd7qp3 5.19 -> 5.22; Muse 3f2w0h 4.79 -> 4.72; DeepSeek 696vw4 4.89 -> 4.66). One is large: DeepSeek 582llj 5.03 public -> 4.31 held-out, which scored 0 at $200. The grade page does not list failed or timed-out requests, so I cannot tell whether that drop is overfitting or failed requests.",
+   "The public examples are not in the held-out set (task.yaml:35), and the held-out set uses the same eight categories. Several agents generated category-matched synthetic prompts with LLMs (Opus 1qhhnj: 177k synthetic prompts in the eight categories). That is legitimate distribution matching."
+  ],
+  "noise": "Opus (21.2, 37.0, 41.8) and Fable (15.6, 26.8, 29.5) rise monotonically with wallet. Astra (16.8, 16.5, 25.8) and Argon (12.9, 10.4, 16.9) are flat at $10-$50. Muse falls at $200 (9.5, 13.1, 5.2) because its $200 run spent only $35. DeepSeek peaks at $50 (2.4, 6.6, 0). Grading is deterministic, and the winner's margins (4.4, 10.2 and 12.3 points) are many times any plausible difference between near-identical approaches.",
+  "elicitation": "Muse left most of its $200 budget unspent ($34.5 in 3f2w0h), so its $200 score fell below its $50 score. Astra made heavy use of multi-agent wait calls (248 in 5b038w, 151 in fd7qp3) without irregularities. The Opus and Fable runs kept a proper held-out split of their own generated data for checkpoint selection. Everyone else's choices also rested on the 40 public examples (allowed).",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "All 18 reviews pass and I agree with all 18. There are no infrastructure zeros (DeepSeek 582llj's 0 is a below-floor tau with an unexplained public-to-held-out drop, and it is last at $200 either way). Opus wins every wallet by at least 4.4 points under a deterministic grader.",
+  "science_vs_gaming": "No gaming. The scores come from standard distillation of a 1.7B model on the target's greedy outputs plus quantization-aware compression to meet the 1 GB cap. What separated the trials was how well the prompt distribution was matched (large LLM-generated, category-matched prompt sets), online KL distillation against the target's logits, and careful mixed-precision packing. Opus 8r9f65 found by sensitivity analysis that 'Layer 2's down_proj turns out to be the single critical tensor' [93] and spent 4/5 bits where they mattered. These are known techniques applied well; none is a new idea about speculative drafting."
+ },
+ "trials": [
+  {
+   "model": "claude-opus-5-5",
+   "trial": "58i7sa",
+   "wallet": 10,
+   "official_score": 21.2,
+   "official_review": "pass",
+   "approach": "Qwen3-1.7B fully fine-tuned on Qwen3-8B greedy continuations of deepseek-v4-flash synthetic prompts and train-split public prompts, then QAT to group-64 4-bit and a phase-4 refinement. tau 5.108.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: three declared sources, 'Train splits only of public HF corpora pinned to revisions'",
+    "4 self-checks passed; '66 files, 955.1 MB'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "1fhd62",
+   "wallet": 10,
+   "official_score": 16.8,
+   "official_review": "pass",
+   "approach": "LoRA distillation of Qwen3-1.7B on Qwen3-8B rollouts for UltraChat/SmolTalk/Aya train prompts plus synthetic prompts, NF4 weights. tau 5.002.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'hf_hub_download on public TRAIN-split parquet files'; NF4 tensor inventory matches Qwen3-1.7B"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "2ot571",
+   "wallet": 10,
+   "official_score": 15.6,
+   "official_review": "pass",
+   "approach": "Full fine-tune of Qwen3-1.7B on Qwen3-8B continuations of train-split prompts (gsm8k, MATH, smoltalk, aya, Magpie, oasst2, dolly) plus Qwen3-8B-written prompts, then QAT int4. tau 4.974.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: init_from null, base Qwen3-1.7B pinned",
+    "The hendrycks_math 'test-00000' path appears only in a repo file listing (trajectory line 1460)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "3oklat",
+   "wallet": 10,
+   "official_score": 12.9,
+   "official_review": "pass",
+   "approach": "LoRA logit-KD of Qwen3-1.7B from Qwen3-8B on UltraChat/OpenHermes/Aya train prompts plus synthetic prompts; soup of two merged runs, GPTQ group-64. tau 4.909.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'pack_soup_gs64.py averages two LoRA-merged Qwen3-1.7B checkpoints (v3 and v3_clean) and packs them with GPTQ'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "mugqi9",
+   "wallet": 10,
+   "official_score": 9.5,
+   "official_review": "pass",
+   "approach": "Full SFT of Qwen3-1.7B on 14,639 Qwen3-8B continuations of template-generated synthetic prompts, GPTQ int4 group-64 plus a 6-bit embedding. tau 4.827. Spent $8.9 of $10.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'gen_prompts.py builds them from hand-written templates and topic banks and loads no external data'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "696vw4",
+   "wallet": 10,
+   "official_score": 2.4,
+   "official_review": "pass",
+   "approach": "SFT of Qwen3-1.7B on Qwen3-8B continuations (OpenHermes, gsm8k, MATH algebra, MetaMathQA, CodeAlpaca, Magicoder, Aya, writingprompts), int4 with AWQ-style scaling, custom torch runner. tau 4.658, just above the floor.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing: 'int4 groupwise (g32 linears / g16 embedding) with AWQ-style α=0.25 activation scaling'; public walk tau 4.891"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "1qhhnj",
+   "wallet": 50,
+   "official_score": 37.0,
+   "official_review": "pass",
+   "approach": "Full fine-tune of Qwen3-1.7B on Qwen3-8B continuations of 212k prompts (177k LLM-generated, category-matched synthetic prompts plus 35k train-split prompts), combined hard-label CE and live-teacher KL, QAT to about 4.5 bits. Checkpoint selected on its own hash-held-out split.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing: '177k were synthetic prompts in the eight categories, generated through spin openrouter without showing the generator any evaluation prompts'; 'Qwen3-4B ... squeezed to about 2 bits per weight to fit 1 GB it fell to 3.3'",
+    "Public 5.52 vs held-out 5.49"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "4g3uws",
+   "wallet": 50,
+   "official_score": 26.8,
+   "official_review": "pass",
+   "approach": "Full fine-tune of Qwen3-1.7B on Qwen3-8B continuations of Qwen3-8B-generated prompts (styled after the public examples) and train-split corpora, then QAT g64 and KD-QAT. tau 5.242.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'The v3/v4 few-shot style references come from the shipped /task/public examples, which are allowed'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "5b038w",
+   "wallet": 50,
+   "official_score": 16.5,
+   "official_review": "pass",
+   "approach": "Staged distillation of Qwen3-1.7B (distilled -> expanded -> focused -> polish -> QAT -> rank-32 adapter) on Qwen3-8B continuations of SmolTalk/UltraChat/Aya/GSM8K train prompts plus authored tasks. tau 4.995 (public 5.229).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'scripts that download pinned train-split files only'",
+    "Closing: 'Public mean acceptance length: 5.229'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "2j2fr1",
+   "wallet": 50,
+   "official_score": 13.1,
+   "official_review": "pass",
+   "approach": "Full fine-tune of Qwen3-1.7B on 39,369 Qwen3-8B continuations (GSM8K, Orca-Math, Dolly, Alpaca, UltraChat, Magicoder, Aya, SQuAD contexts, all train splits) plus templates; GPTQ 4-bit g64 plus NF4 embedding. tau 4.915.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'Every load_dataset call uses split=train or train_sft'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "4a9bxl",
+   "wallet": 50,
+   "official_score": 10.4,
+   "official_review": "pass",
+   "approach": "Distillation of Qwen3-1.7B on Qwen3-8B continuations of smol-smoltalk/Aya train prompts and archetype templates; final soup of its own checkpoints plus a LoRA, QAT packed. tau 4.851.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'An EAGLE drafter (AngelSlim/Qwen3-1.7B_eagle3) showed up in an HF search listing at trajectory#58 but was never downloaded or used'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "2k0m92",
+   "wallet": 50,
+   "official_score": 6.6,
+   "official_review": "pass",
+   "approach": "Qwen3-1.7B distilled on Qwen3-8B continuations, GPTQ 4-bit g32 act-order, then a second round (dequantise, fine-tune on 6,449 new continuations, re-quantise). tau 4.759.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing: 'GPTQ 4-bit group-32 act-order, then a second distillation round'",
+    "Selection on its own holdouts (dev2, refs_p2_hold)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "8r9f65",
+   "wallet": 200,
+   "official_score": 41.8,
+   "official_review": "pass",
+   "approach": "Stage-wise online KL distillation of Qwen3-1.7B from Qwen3-8B (CE plus KL on response positions) over 83k+ conversations (synthetic category prompts and public train prompts), sensitivity-guided mixed 4/5-bit packing with layer-2 down_proj in bf16, QAT. Best score in the task. tau 5.604.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[40] 'naive 4-bit RTN quantization drops it to 3.94, below the 4.6 floor'",
+    "[93] 'Layer 2's down_proj turns out to be the single critical tensor—keeping just it in bf16 recovers most of the 4-bit loss'",
+    "[53] own 400-prompt dev set held out for model selection"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "3avp9w",
+   "wallet": 200,
+   "official_score": 29.5,
+   "official_review": "pass",
+   "approach": "Qwen3-1.7B trained on about 129k Qwen3-8B continuations (tulu-3, UltraChat, Magicoder train plus Qwen3-8B synthetic prompts), continuation run, then 4-bit QAT. tau 5.309.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[199] 'The extra QAT pass essentially tied (5.422 vs 5.416), so I'll keep the already-selfchecked q4_cont2q weights'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "fd7qp3",
+   "wallet": 200,
+   "official_score": 25.8,
+   "official_review": "pass",
+   "approach": "Staged distillation of Qwen3-1.7B on Qwen3-8B targets for UltraChat/Alpaca/Magicoder train prompts plus synthetic prompts and multi-turn 'growth dialogues', quantized with QAT. tau 5.220 (public 5.19).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'logs/download_data.log records those downloads' with sha256"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "1n9j8t",
+   "wallet": 200,
+   "official_score": 16.9,
+   "official_review": "pass",
+   "approach": "Distillation of Qwen3-1.7B on Qwen3-8B continuations of dolly/gsm8k/Magicoder/oasst2/UltraChat train prompts, chained runs from its own soups. tau 5.006.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'The selection/dev sets (dev_combined, dev_v5) were carved out of those same train-derived rows'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3f2w0h",
+   "wallet": 200,
+   "official_score": 5.2,
+   "official_review": "pass",
+   "approach": "Full fine-tune of Qwen3-1.7B on 72,736 Qwen3-8B continuations of train-split prompts, quantized under 1 GB. Spent $34.5 of $200. tau 4.725.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing: 'Public speculative walk (all 40 conversations, concurrency 32): tau = 4.79'",
+    "Grade check: 'Generating test split' log lines are HF split materialisation only"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "582llj",
+   "wallet": 200,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "Full fine-tune of Qwen3-1.7B with CE plus top-8 KL on 60k then 75k Qwen3-8B continuations (templates, train splits, Qwen3-8B-written prompts), int4 g64. Public tau 5.03 but held-out 4.31, below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[274] 'final3 ≈ final2 (5.034 vs 5.025, within noise), so I'll ship final2'; [305] final4 (OpenHermes train) rejected on public tau",
+    "Held-out tau 4.3057; the 0.72 drop from public is the largest in the task, and request-failure counts are not published"
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

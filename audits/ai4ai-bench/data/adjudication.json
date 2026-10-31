@@ -1,0 +1,19 @@
+{
+ "_about": "Lead-auditor adjudication applied on top of data/task_reviews/*.json. The reviewers' original calls stay in those files; summarize.py reports the adjudicated values. Every counted defect was re-verified in code by the lead auditor (citations below).",
+ "task_overrides": {
+  "model_soup_clip_imagenetv2": {"rubric_code": "MINOR", "counted_toward_threshold": false,
+   "note": "Reviewer: CONSTRUCT, counted. The proxy rows (offsets 0-1) are inside the final 10,000 rows with labels visible, but this is disclosed as a design choice (harness/final_eval.py:12-18 'the proxy is now *inside* the final') and is worth about 0.006 sigma per cell. The narrow sigma range (0.117-0.142) is a construct caveat, not a confirmed score-changing defect."},
+  "openr1_code_livecodebench": {"rubric_code": "MINOR", "counted_toward_threshold": false,
+   "note": "Reviewer: FN, counted. The paper's baseline 0.127 is a single run above the task's own six-replay mean 0.12286 (instruction.md:36,41). This moves 11 cells across the 'below baseline' line in the paper's narrative but changes sigma by at most ~0.005 per cell; logged as minor for consistency with DiGress and OWL."}
+ },
+ "verified_counted_defects": {
+  "ragen_sokoban_grpo": "FP. declaration.py:50 FINAL_ENVIRONMENT_SEED = 123 ('stays host-side so exploration cannot reconstruct the held-out boards') equals upstream RAGEN@20daedc4 config/base.yaml seed.val = 123, which the Dockerfile copies into the agent's /workspace/ragen (environment/Dockerfile:95); board generation is deterministic. fast_eval.py:236 hard-codes proxy_final_overlap_fraction 0.0 although 7/512 overlap. BFS-imitation training covered 243-490 of 512 final boards; five cells score 512/512 (sigma = 1).",
+  "ddpo_sd15_aesthetic": "FP. tasks/README.md:9 promises 'alignment/diversity gates'; harness/final_eval.py:233 says 'the original DDPO benchmark has no alignment/diversity guard'. The score-only final_reference.json generation_seed 20269702 (assets.lock.yaml:138) is hard-coded in the readable /opt/harness/final_eval.py:261,285 and grade.py:308. 8 cells with collapsed alignment/diversity carry 94% of the task's above-baseline sigma.",
+  "openunlearning_tofu_npo_llama3p2_1b": "FN. harness/final_eval.py:192-221: the balanced score is the harmonic mean of two values clipped to [0,1], so it cannot exceed 1.0; the paper's optimum 2.08 is unreachable and sigma is capped at 0.185 even for a perfect score.",
+  "ultrafeedback_bt_rm_rewardbench": "FN. instruction.md:30 calls the 74.569 reference 'seed-sensitive ... a single-run reference'; the paper uses 74.9. Unchanged-recipe replays score 65.4-73.95 (seed spread ~8.5 points vs SE ~0.8), so the bar is inside the noise. The headline score covers all 2,985 pairs including the 512 visible proxy pairs (final_eval.py:339)."
+ },
+ "benchmark_wide": {
+  "checkpoint_selection": "orchestrator/final_score.py:148 selects the best of up to 3 checkpoints on the final metric. In 163 of 271 completed cells the reported checkpoint is not the last; mean sigma 0.165 vs 0.158 with the last checkpoint; 21 cells flip between beating and missing the baseline.",
+  "site_data_errors": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__medium displays negative perplexities (-24.31 for a reported 24.3104)."
+ }
+}

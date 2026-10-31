@@ -1,0 +1,86 @@
+{
+  "task": "ai-text-detection",
+  "fairness_verdict": "unfair",
+  "verdict_rationale": "The held-out set is a 5,000-row subsample of DetectRL-X's public test rows, and the prompt allows its in-distribution train split while the source is named only in the reviewer rubric, so the score mostly measures whether the agent recognises the benchmark (DetectRL-X users average 92, non-users 65). The metric code itself is correct and deterministic.",
+  "noise_se_points": 2.0,
+  "floor": "None: task.yaml has no score_normalization (tests/task/task.yaml:1-50), so the reward is raw 1 - macro FNR. A constant or input-blind output scores 0: every AI passage ties the threshold, and ties count as misses (validate.py:52-55, :102). Random scores give about 1. This is a sensible zero.",
+  "ceiling": "1.0 is perfect recall at 1% FPR. Not measured, but nearly reached: Opus scores 98.3-99.2. The ceiling compresses the top of the range, and the useful spread there is under 2 points.",
+  "usable_range": "observed 0-99.2 of 0-100 (wallet means 69.7 / 71.3 / 73.0); the full range is used",
+  "feasible_at_10": "yes: Opus scored 98.3 and Sonnet 96.1 at $10. Most of the score comes from the data choice, not compute: a LoRA'd 3-4B model or an XLM-R/mDeBERTa encoder trained on DetectRL-X train fits in a few H100-hours.",
+  "budget_scaling": "Weak. Mean over 19 models is 69.7 / 71.3 / 73.0 at $10 / $50 / $200 (mean compute spend $6.7 / $23.2 / $38.5). The ranking is set by whether the agent found DetectRL-X, not by spend. Gemini 4 Argon 44 -> 27 -> 87 and Muse 73 -> 49 -> 69 are not monotone.",
+  "selfcheck_fidelity": "Good for gates. Self-check sends 5,000 resampled public passages through the same graded_batch path, with the same 500 s deadline (evaluation_samples / 10) and the same cold-server first request (verifier.py:166-217). It warns that held-out passages include Russian and are about 9% longer (verifier.py:109-110). It gives no score and no review, so the review (the binding gate here) and the Russian/OOD tail are not tested.",
+  "judge": "No LLM judge in the metric. The reviewer (Claude Opus 5.5, global) applies 6 task checks plus the session check, and the provenance check is where all the leakage control lives (tests/task/review.py:30-47).",
+  "neutrality": "Favours agents that recognise DetectRL-X from the public metadata: the 16 condition names (character_deletion, zero_width_insertion, ...) and 8 languages are shipped verbatim (ai_text_detection.py:33-35, :327). The rubric names the source (review.py:36-37) but the agent never sees it. The anonymised generators (deepseek-v3, gemini-2.5-flash, gpt-4o, qwen-max; ai_text_detection.py:29-30) also favour agents whose synthetic-data generator choice happens to match them. No harness or vendor gate beyond that.",
+  "reference_solution": "solution/ is the shared smoke fixture. /detect returns a constant {\"p_ai\": 0.5} (solution/server.py:127). It scores 0 and fails the review (solution/README.md). It does not show the task is solvable; the trials do.",
+  "issues": [
+    {
+      "category": "heldout",
+      "severity": "high",
+      "status": "confirmed",
+      "finding": "The held-out passages are DetectRL-X's public, ungated test rows (MIT). Its train split is allowed and in-distribution: same languages, generators, domains and 16 attack conditions. The source is named only in the reviewer rubric, so the task rewards benchmark recognition, and only the review stands between an agent and the test rows. The blog's 'out-of-distribution held-out' claim does not hold. The held-out differs from the public sample only by adding Russian.",
+      "evidence": [
+        "tests/task/review.py:36-37 'our validation set is from the DetectRL-X binary open release ... the held-out passages are drawn from its test rows'",
+        "tests/task/review.py:38-39 'its training rows are an ordinary public training split'",
+        "tests/task/ai_text_detection_sources.json:2-5 'WUJUNCHAO/DetectRL-X' 'MIT' 'public, ungated'",
+        "tests/task/ai_text_detection.py:157-167 held-out groups drawn from upstream split=='test'"
+      ],
+      "affects": "Agents that identify DetectRL-X (Opus, Astra, DeepSeek; mean 92.0) over those that do not (Fable, Gemini, Muse; mean 65.3). It changes ranks at every wallet."
+    },
+    {
+      "category": "heldout",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "Only 5,000 of the 78,090 held-out rows are graded: one AI row per language x family x condition x domain (3,072), plus 1,928 humans. The 1% FPR threshold is therefore set by about 19 human passages, and threshold noise dominates. A Gaussian-ROC simulation gives SE of about 3.4 points at score 0.53, 2.1 at 0.85 and 0.4 at 0.98. That is larger than the 0.5-point binomial figure in the trial audit. The cut is forced by the 10 passages/s gate (5,000 / 10 = 500 s); more humans alone would pin the threshold more cheaply.",
+      "evidence": [
+        "tests/config.json:5-6 '\"expected_samples\": 78090, \"evaluation_samples\": 5000'",
+        "tests/task/verifier.py:47 'selected = [min(rows, key=lambda row: rank(row[\"id\"])) for rows in ai.values()]'",
+        "environment/validation/validate.py:52-55 threshold from floor(0.01*n) humans"
+      ],
+      "affects": "Mid-range models (40-90): differences under about 4-6 points are not significant. The top (Opus 98-99) is robust."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Ties at the threshold count as misses, and p_ai is capped at 1. A detector whose sigmoid saturates to 1.0 on at least 1% of humans gets threshold 1.0, and every AI passage scored 1.0 is missed. The contract documents 'at or below', but not this consequence. Muse lost points to it (threshold 1.0000).",
+      "evidence": [
+        "environment/validation/validate.py:102 'sum(v <= t1 for v in values)'",
+        "environment/validation/CONTRACT.md:11 'FNR is the fraction of AI passages at or below it'"
+      ],
+      "affects": "Agents that emit saturated fp16/fp32 probabilities, downward. It is avoidable by returning logits squashed with more precision."
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The prompt bans starting from 'one already trained for AI-text detection', but no review check names this rule. The checks only require that p_ai come from the candidate's own trained detector, so a fine-tuned descendant of a released detector is not explicitly caught. The rubric also bans zero-shot LM-likelihood features from a model the candidate did not train. The prompt says only 'Train one local model'.",
+      "evidence": [
+        "instruction.md:3 'not one already trained for AI-text detection'",
+        "tests/task/review.py:11-17 single_local_model_scores 'What fails: scoring with likelihoods, perplexities or features from a model the candidate did not train'"
+      ],
+      "affects": "No observed trial; the risk is reviewer inconsistency."
+    },
+    {
+      "category": "gate",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The throughput gate is all-or-nothing on the whole batch: 500 s for 5,000 passages, including the first request to a cold server, at concurrency 32 in barrier chunks of 64. 10 passages/s is lenient for 3-4B models on an H100, and no top-6 trial missed it. The causes of the three zeros (Beam $10 with no review; Beam and Gemini 3.8 Flash at $200 with review pass) are not in the audit data.",
+      "evidence": [
+        "tests/task/verifier.py:175 'deadline = min(... len(batch) / MINIMUM_MESSAGES_PER_SECOND)'",
+        "frontier_ml/runtime/resources.py:634-641 chunks of 64, 'Batch exceeded ... score is zero'"
+      ],
+      "affects": "Slow servers lose everything rather than a fraction."
+    },
+    {
+      "category": "other",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Fine as designed: the scoring is deterministic (SHA-256 subset selection, no judge); failed requests score as the worst answer, not omitted (validate.py:46-49); per-language FPR varies under a global threshold, which is documented (validate.py:15-16); and the source groups overlapping DetectRL-X train were removed from the held-out set.",
+      "evidence": [
+        "tests/task/verifier.py:23,34-35 SAMPLING_VERSION hash ranking",
+        "tests/task/ai_text_detection.py:166-167 'overlaps_upstream_train'"
+      ],
+      "affects": "none"
+    }
+  ]
+}

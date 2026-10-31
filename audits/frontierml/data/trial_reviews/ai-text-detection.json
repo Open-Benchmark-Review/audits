@@ -1,0 +1,354 @@
+{
+ "task": "ai-text-detection",
+ "task_level": {
+  "spec_issues": [
+   "The held-out set is the public test split of a public benchmark. The trusted review policy says so: 'our validation set is from the DetectRL-X binary open release, WUJUNCHAO/DetectRL-X: the held-out passages are drawn from its test rows' (induction-labs/frontier-ml/tasks/ai-text-detection/tests/task/review.py:36-38; sources pinned in tests/task/ai_text_detection_sources.json). The test rows are public and ungated, so only the provenance review stops an agent from training on the held-out passages.",
+   "The prompt explicitly allows 'training splits and other public corpora', and the review policy calls DetectRL-X's training rows 'an ordinary public training split'. The builder drops held-out groups that overlap upstream train (ai_text_detection.py:157-167). Training on DetectRL-X train is therefore legal, and it is in-distribution: same 8 languages, 4 generators (deepseek-v3, gemini-2.5-flash, gpt-4o, qwen-max), 6 domains and 16 conditions. The task mostly measures whether the agent identifies the source benchmark from the validation metadata. The blog's claim of an 'out-of-distribution held-out test set' does not hold for this task.",
+   "The 9 trials that found DetectRL-X (all 3 Opus, all 3 Astra, all 3 DeepSeek) score 78-99, mean 92.0. The 9 that did not (Fable, Gemini, Muse) score 27-87, mean 65.3. Opus 4qgtmq found it by searching HF for the condition names ([15]: 'Found the likely source benchmark: **DetectRL-X** on HF has exactly these 16 conditions and 8 languages'). Opus 3ie01s matched the 200 validation passages against the full file and found them in its test split ([15]-[16]: 'Validation samples all came from DetectRL-X's test split').",
+   "The CONTRACT forbids caching ('score only its text, without caching or comparing across requests'), and the reviewer checks statelessness. No trial broke this rule.",
+   "Several agents downloaded the full DetectRL-X files, which include the test rows, and filtered to split=='train' (Opus 4qgtmq [16] deleted the raw file afterwards). Two agents read test rows for inspection only: Opus 3ie01s [15] (overlap with validation) and DeepSeek z7tnpk [111] (comparing strategy files). review.py allows reading test rows only for decontamination. The reviewer judged both as inspection, consistently across the two models."
+  ],
+  "verifier_issues": [
+   "Metric: 1 - mean FNR over language x family x condition cells, at one global threshold that lets at most floor(1% x n) humans score strictly above it (environment/validation/validate.py:52-55). The held-out batch has 5,000 passages: exactly one AI row per language/generator/condition/domain (8x4x16x6 = 3,072) plus 1,928 humans (tests/task/verifier.py:27-60). Each of the 512 macro cells therefore has 6 AI passages. Per-cell estimates are coarse, but the 512-cell mean is stable (about 0.5 point binomial SE at recall 0.9, plus threshold noise from about 19 humans above the cut).",
+   "An AI passage that ties the threshold counts as a false negative. Muse's detectors saturate: the threshold is 1.0000 or 0.9999, with realized FPR 0.0093 instead of 0.0099 (13r3lz, 2jzq5c, 3p343s). Any AI passage scored 1.0 then counts as missed. This is the agent's calibration problem, but the rule is not stated, and it penalizes saturated fp32 or bf16 outputs.",
+   "No LLM judge is involved. The scorer cannot be gamed beyond training on the public test rows, which would have to be caught by review."
+  ],
+  "noise": "The scale has fine resolution (macro over 512 cells, fixed held-out set). The noise between models is small next to the gaps. Opus is 98.3/98.9/99.2 and leads the next model (Astra 90.7/91.9/94.2) by 5-8 points at every wallet. The within-model spread is large where the data choice changed: Gemini goes 44.2 -> 27.0 -> 87.0, and DeepSeek 5pepog (78.3) only added DetectRL-X late (v7). Gemini 3hgrat shows the risk of fitting the 200 public passages: its readouts were fitted by 5-fold CV on them, giving a public diagnostic of 0.98 and a held-out score of 0.27.",
+  "elicitation": "The harnesses had no visible effect on the outcome. Whether the agent searched for the source benchmark did. Gemini trials are re-runs (r2, and 3hgrat is r4 on 2026-10-17, after the 2026-10-13 public release). Gemini 3hgrat's web search at [20] returned a grounding summary whose sources were all frontierml.org pages. The summary was generic and the agent did not open them. Gemini 2itta7 hit RESOURCE_EXHAUSTED quota errors at [322], after its model was final. No trial accessed inductionlabs/frontier-ml-tasks or the benchmark repo.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "All 18 reviews passed, and I found no violation the reviewer missed and no infrastructure zero. Opus wins every wallet by 5+ points with clean DetectRL-X train-split provenance. The main defect is design: the held-out set is a public benchmark test split whose train split is allowed. It shapes what the task measures, but it does not change any winner through a scoring error.",
+  "science_vs_gaming": "No trial gamed the scorer. Most of the spread comes from one piece of benchmark detective work: recognising DetectRL-X from the validation metadata (16 named conditions, 8 languages, anonymised families) and training on its public train split, which the rules allow. The best work then reconstructed the attack suite from the paper. Opus 5f6q4z and 4qgtmq, Astra and DeepSeek trained an mT5 'humanizer' on train-split pairs to emulate the seq2seq-paraphrasing attack, and used the authors' own Qwen-DPO paraphrasers. This is careful, transferable engineering (simulate your adversary's attack distribution), but it is not new. Without the source benchmark, the generic synthetic-data approaches (Fable, Muse, Gemini) plateau at 70-87."
+ },
+ "trials": [
+  {
+   "model": "claude-opus-5-5",
+   "trial": "4qgtmq",
+   "wallet": 10,
+   "official_score": 98.3,
+   "official_review": "pass",
+   "approach": "Identified DetectRL-X as the source benchmark from the 16 condition names. Fine-tuned Qwen2.5-3B (LoRA, merged, new score head) on DetectRL-X binary and ternary train rows only, and recreated the attacks from the paper's appendix: character, homoglyph and zero-width edits, truncations, mBERT/mBART, an mT5 seq2seq model fine-tuned on train pairs, and Qwen2.5-7B paraphrases.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[15] 'Found the likely source benchmark: **DetectRL-X** on HF has exactly these 16 conditions and 8 languages.'",
+    "[16] download script keeps split=='train' and removes the raw file ('removed raw file (contained test split)').",
+    "Verifier macro FNR 0.0166, AUROC 0.9989. All 7 review checks pass; provenance check cites the train-only filter."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "5f6q4z",
+   "wallet": 50,
+   "official_score": 98.9,
+   "official_review": "pass",
+   "approach": "Fine-tuned Qwen3-4B-Base (LoRA) on the DetectRL-X train split. Added locally generated attack data: Qwen2.5-7B rewrites via vLLM, mBERT, NLLB-200, and an mT5 'humanizer' trained on train pairs to emulate seq2seq paraphrasing. Used CUDA graphs to meet throughput on the grader.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[206] 'the test set comes from the DetectRL-X benchmark, whose train split is public and allowed. I used only train-split rows'.",
+    "[206] 'the first model caught 0 of 7 validation \"seq2seq paraphrasing\" samples ... so I trained the same kind of rewriter on train-split pairs'.",
+    "Macro FNR 0.0114; review pass 7/7."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "3ie01s",
+   "wallet": 200,
+   "official_score": 99.2,
+   "official_review": "pass",
+   "approach": "Fine-tuned Qwen3-4B (weight soup, separate head) on DetectRL-X ternary train rows (4% hash-held-out for selection). Generated attacks with the DetectRL-X authors' public Qwen-Paraphraser-DPO models, mBART, mT5 and BERT.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[15] matched the validation passages against train and test rows of binary_general_open.json: '20 (0, 'general', (('human', 'test'),))'. [16] 'Validation samples all came from DetectRL-X's test split, so I'll train only on the train split'.",
+    "review.py:36-44 allows reading test rows only for decontamination; this was inspection that fed nothing, and the reviewer said so.",
+    "Macro FNR 0.0081 (top score of the task)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "3z1pot",
+   "wallet": 10,
+   "official_score": 90.7,
+   "official_review": "pass",
+   "approach": "XLM-R-large fine-tuned on DetectRL-X train rows (fetched at a pinned revision, filtered to train before reading text), plus back-translations of train AI rows. Then adapted and calibrated on the 200 provided passages, which the prompt allows.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[10] fetches the DetectRL-X README; prepare_data.py keeps split=='train' (review provenance check).",
+    "[133] 'Development recall was 98% at 1% FPR on the provided examples; these influenced training and selection'. That use is permitted.",
+    "Macro FNR 0.0934."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "30himq",
+   "wallet": 50,
+   "official_score": 91.9,
+   "official_review": "pass",
+   "approach": "Parameter-averaged XLM-R-large runs trained on DetectRL-X train, RAID train, m2m100 round-trip paraphrases and XLM-R masked edits built from train rows, plus the 200 provided examples.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: 'evidence/data_acquisition.log shows 76,800 train pairs accepted and 48,000 non-train rows discarded'.",
+    "Macro FNR 0.0811; selfcheck 307.9 passages/s."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "5im6qs",
+   "wallet": 200,
+   "official_score": 94.2,
+   "official_review": "pass",
+   "approach": "XLM-R-large fine-tuned on DetectRL-X train plus locally generated decoder rewrites (vLLM) and mined hard negatives, then adapted on the provided examples.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: scripts assert source_split=='train'; 'Trajectory searches found no use ... of test rows'.",
+    "Macro FNR 0.0576."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "1rg72h",
+   "wallet": 10,
+   "official_score": 87.1,
+   "official_review": "pass",
+   "approach": "mDeBERTa-v3-base fine-tuned in three stages on DetectRL-X train rows plus synthetic versions of all 16 conditions: mBERT, mBART, Qwen2.5-7B, the authors' Qwen-DPO paraphrasers, a local mT5 paraphraser and character perturbations.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[32] 'is training on DetectRL-X train allowed given our task's eval likely uses DetectRL-X test? Yes'.",
+    "[51] reasoning rejects the authors' released detector: 'DetectRL-X-XLM-RoBERTa-Detector-All — a detector trained for AI-text detection. We must NOT use that'.",
+    "Macro FNR 0.1292."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "5pepog",
+   "wallet": 50,
+   "official_score": 78.3,
+   "official_review": "pass",
+   "approach": "XLM-R-large plus an 18-feature head. v4 was trained on SemEval-2024, COLING-2025, HC3, MAGE, RAID and human corpora. v7 added DetectRL-X train rows and in-domain humans, and v8 added paraphrase replay.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[858] 'Zero leakage: no supplied passage occurs in the 152,482-row DetectRL-X training sample'.",
+    "Public diagnostic 0.85 against held-out 78.3; DetectRL-X was added only in the later stages."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "z7tnpk",
+   "wallet": 200,
+   "official_score": 89.0,
+   "official_review": "pass",
+   "approach": "XLM-R-base fully fine-tuned on DetectRL-X train rows (binary and trinary) plus synthetic seq2seq (mT5 humanizer), mBERT, mBART-50 and character attacks. The 200 provided passages were weighted x60 in training, which is allowed.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[111] loads test rows only to compare strategy files ('TEST same human 48000 same llm 2 of 48000'); nothing feeds training. This was judged the same way as Opus 3ie01s.",
+    "Macro FNR 0.1100."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "yllepg",
+   "wallet": 10,
+   "official_score": 71.9,
+   "official_review": "pass",
+   "approach": "Qwen3-1.7B-Base fully fine-tuned as a classifier, with Unicode/homoglyph normalisation before scoring. Stage 1 used COLING-2025 MGT train, RAID train, Beemo, open human corpora and OpenRouter generations; stage 2 added NLLB and LLM rewrites.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[181] 'two-stage training (adding AI-rewrite data to catch paraphrasing/back-translation cases) lifted held-out AUROC from 0.943 to 0.9915'.",
+    "Never mentions DetectRL-X; macro FNR 0.2813."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "6c6gex",
+   "wallet": 50,
+   "official_score": 83.6,
+   "official_review": "pass",
+   "approach": "Qwen3-1.7B-Base custom detector trained on human corpora (FineWeb, Wikipedia, XL-Sum, Gutenberg), its own OpenRouter generations across the 16 condition types, COLING/SemEval/MAGE/HC3 train splits and programmatic perturbations, then a stage-2 continuation.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[16] plan: 'combining public human corpora with AI text generated across diverse LLMs and the benchmark's edit conditions'.",
+    "Macro FNR 0.1637."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "1h934s",
+   "wallet": 200,
+   "official_score": 83.2,
+   "official_review": "pass",
+   "approach": "Qwen3-1.7B-Base classifier trained in two chained runs on about 35k self-generated AI passages, degraded paraphrases from small high-temperature models, NLLB round trips and public train splits. The final model was picked on its own dev set.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[105]-[106] 'Run2 final is the best single model and the ensemble adds nothing'.",
+    "Macro FNR 0.1680."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "2itta7",
+   "wallet": 10,
+   "official_score": 44.2,
+   "official_review": "pass",
+   "approach": "XLM-R-large with attention pooling, a feature MLP, auxiliary domain and condition heads and WiSE-FT. Trained on COLING-2025 MGT train, c4/Wikipedia humans and OpenRouter generations, then recalibrated on its local eval and the 200 public passages.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: final recalibration (trajectory#313) used local_eval_v2 and the public validation cache, which is allowed.",
+    "Macro FNR 0.5583; AUROC 0.951, but poor at the 1% tail."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "3hgrat",
+   "wallet": 50,
+   "official_score": 27.0,
+   "official_review": "pass",
+   "approach": "mDeBERTa-v3-base with several readouts (deep head, RTD and FT linear, fused, plus Russian-specific heads). The readouts were fitted by 5-fold CV on the 200 public passages, which made public and held-out scores diverge badly.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[289]/[294] public diagnostic_score 0.98, against held-out 27.0. The fusion was fitted on the 200 shipped passages ('strict 5-fold cross-validation on the validation data, fitting the linear readout'). The prompt allows this use, so it is overfitting, not a violation.",
+    "[20] web search grounding summary lists only frontierml.org sources (r4 run on 2026-10-17); the agent did not open them, and the content was generic.",
+    "Macro FNR 0.7305."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "2li4i8",
+   "wallet": 200,
+   "official_score": 87.0,
+   "official_review": "pass",
+   "approach": "Qwen3-1.7B-Base LoRA plus a detector head, trained in three stages: COLING/MAGE/HC3/autextification train splits and OpenRouter generations of the 16 conditions, then fine-tuning on the 200 public passages.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Review: 'The public validation examples ... are used for model selection and stage-3 fine-tuning, which is allowed'.",
+    "Macro FNR 0.1302, the best non-DetectRL-X result."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "2jzq5c",
+   "wallet": 10,
+   "official_score": 73.0,
+   "official_review": "pass",
+   "approach": "XLM-R-large fine-tuned on MAGE and RAID train shards plus Qwen2.5-7B and Mistral-7B generations, translation, paraphrase and perturbation augmentation.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Threshold 0.9999 and FPR 0.0093: saturated scores tie at the threshold.",
+    "Macro FNR 0.2699."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "13r3lz",
+   "wallet": 50,
+   "official_score": 48.8,
+   "official_review": "pass",
+   "approach": "XLM-R-large fine-tuned on SemEval-2024 Task 8, AuTexTification and MAGE train splits, human text from Wikipedia, Wikisource and FineWeb, and Qwen2.5-7B generations.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Verifier threshold_1pct 1.0000 and FPR 0.0093: saturated probabilities make every AI passage scored 1.0 a miss.",
+    "[282] 'v1 (public training splits only) scored 0.08 on the provided sample'. v2 reached 0.60 public and 48.8 held-out."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3p343s",
+   "wallet": 200,
+   "official_score": 69.2,
+   "official_review": "pass",
+   "approach": "XLM-R-large fine-tuned on SemEval-2024 and RAID train, Wikipedia and CulturaX humans, Qwen2.5-14B and OpenRouter generations and m2m100 back-translations, then hard-example fine-tuning.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[213] public macro recall 0.74; the first selfcheck failed throughput (listen backlog), fixed later.",
+    "Macro FNR 0.3079."
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

@@ -1,0 +1,351 @@
+{
+ "task": "music-transcription",
+ "task_level": {
+  "spec_issues": [
+   "The held-out set is synthetic: 271 30-second excerpts of a 'niche MIDI catalog' rendered by FluidSynth with four General MIDI soundfonts (FluidR3_GM, MuseScore_General, GeneralUser-GS, TimGM6mb; tests/task/pipeline/README.md and amt_render.py:26-36), with random mix effects. The prompt says only 'different compositions and mixes from the examples, with a range of instrument sounds'. review.py's training_provenance check explicitly lists those same four banks as fine for training renders. So an agent that fingerprints the soundfonts from the 10 public clips and renders training data with them is inside the rules but is fitting the benchmark's renderer; 7 of 18 trials did exactly this (Opus x3, Fable 3zcox2, Astra x3), including the winner at every wallet.",
+   "Pretrained transcription checkpoints (YourMT3+, MuScriptor) are allowed (review.py learned_transcription_model: 'Starting from any public pretrained or published transcription checkpoint is fine'); the prompt says 'Train a model', which some agents read as requiring training from scratch (Astra, DeepSeek, Muse 2i2iw4 trained from scratch).",
+   "Public examples may be used for training, calibration and selection (prompt; review.py; task.yaml shipped_examples_free: true). Astra 1ytf2u and my6vry trained directly on them."
+  ],
+  "verifier_issues": [
+   "Rescaling (tests/task/task.yaml:55-64): 0 = 0.553 macro onset F1 of the untouched YourMT3+ YPTF.MoE+Multi (noPS) checkpoint on the 271 held-out clips, 100 = perfect. Five trials clamp to 0 (DeepSeek x3, Argon 2co5hq at 0.542, Muse u96smp at 0.289); all are ordinary sub-floor models.",
+   "The 10 public clips are much harder for YourMT3+ than the held-out set: agents measured 0.265-0.271 macro F1 for the untouched checkpoint on them (Opus 42qktd [60], pegy8h [35]) against 0.553 on held-out. Local public scores therefore understate held-out scores (Fable 1926qx 0.525 public vs 0.679 held-out; Fable bukin9 0.6145 vs 0.682), which weakens their use for selection and calibration. The pipeline README notes the public/held-out split was reshuffled twice ('reduce_validation' then 'diversify_validation').",
+   "Macro F1 sums matches per class over all 271 clips before averaging nine classes, so a weak class (often mallets or pipe) moves the score a lot; with thousands of notes per class, sampling noise on the aggregate is small (well under 1 point), and the swings between near-identical approaches come from training differences.",
+   "No trial in this task accessed inductionlabs/frontier-ml-tasks, the benchmark repo or frontierml.org (grep over all 18 trajectories). All Slakh2100 use is the train split (reviewer checks; e.g. Fable 1926qx setup extracts '*/train/*' and deletes validation/test/omitted)."
+  ],
+  "noise": "Orderings by wallet are sensible for Opus (61.9 / 61.0 / 64.3, flat) and Astra (49.4 < 73.4 < 76.7), non-monotone for Fable (28.8 / 47.2 / 28.1: only the $50 run fingerprinted the soundfonts), Argon (12.6 / 0 / 38.3) and Muse (4.6 / 0 / 13.3). Winners: $10 Opus 1au9v7 61.9 vs Astra 1ytf2u 49.4; $50 Astra 1bd14o 73.4 vs Opus 42qktd 61.0; $200 Astra my6vry 76.7 vs Opus pegy8h 64.3. Margins of 12 points are far outside metric noise; no plausible noise changes a winner.",
+  "elicitation": "The big split is whether the agent noticed that the test audio is GM-soundfont rendering and matched it. Opus and Astra did in all six runs; Fable only at $50 ([52]), and its other two runs are 19 points lower. Gemini trials are re-runs (-r3); originals are unpublished. DeepSeek ran 6-11 hours but trained small CRNN/U-Net models from scratch on Slakh renders and never reached the floor.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "All 18 reviews passed, and re-checking found no false positive, false negative or infrastructure zero; the five zeros are ordinary sub-floor submissions. The soundfont matching that the winners rely on is explicitly allowed by the review policy, and every wallet's winner did it, so treating it as a defect would not reorder winners either.",
+  "science_vs_gaming": "Real engineering, but much of the top score comes from matching the synthetic test renderer. Astra's best runs train compact CNN onset/frame models from scratch on procedurally generated random compositions rendered through the identified soundfonts plus the 10 public clips (my6vry: 'synthetic random compositions rendered with FluidSynth using public SF2 soundbanks'), beating every YourMT3 fine-tune; that says more about renderer match than about transcription of real recordings. Opus's YourMT3 fine-tunes on soundfont-matched Slakh-train renders gain 0.27-0.29 F1 over the untouched checkpoint. The transferable lesson (timbre domain gap, not timing, is what breaks pretrained AMT models: Opus pegy8h [38] 'Timing isn't the issue ... The errors are timbral') is sound, but held-out clips of real recordings would be needed to tell whether the models transcribe music or just these four soundfonts."
+ },
+ "trials": [
+  {
+   "model": "claude-opus-5-5",
+   "trial": "1au9v7",
+   "wallet": 10,
+   "official_score": 61.88,
+   "official_review": "pass",
+   "approach": "Reused YourMT3's PerceiverTF MoE encoder with a new frame-level onset/frame head, fine-tuned on FluidSynth renders of Slakh2100 train MIDI weighted toward the soundfonts it matched in the public clips; best $10 result by 12 points.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[75] 'The soundfont matching confirms each clip uses a different GM soundfont (e.g., TimGM6mb, GeneralUser GS, FluidR3)'; [100] 'I'll render the Slakh2100 train-split MIDI weighted toward these three'.",
+    "Identified the held-out renderer's soundfonts from the public clips and weighted training renders toward them. The review policy allows both the public clips and these soundfonts (tests/task/review.py training_provenance); the held-out audio is rendered by FluidSynth from exactly FluidR3_GM, MuseScore_General, GeneralUser-GS and TimGM6mb (tests/task/pipeline/amt_render.py:26-30), so this specialises to the evaluation renderer.",
+    "Reviewer: YourMT3 PerceiverTF MoE encoder reused, new TemporalHead with onset/frame logits for 9 x 128, two fine-tuned checkpoints; training audio rendered from slakh2100_flac_redux/train only."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "42qktd",
+   "wallet": 50,
+   "official_score": 60.98,
+   "official_review": "pass",
+   "approach": "Fine-tuned the full autoregressive YourMT3+ on FluidSynth renders of Slakh2100 train MIDI rotating through the GM soundfonts identified in the public clips.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[60] untouched YourMT3+ scores 0.265 on the public clips; [64] 'the organ-only clip aligns with FluidR3_GM/MuseScore accordion (0.98 correlation)'; [75] renders rotating through several soundfonts.",
+    "Identified the held-out renderer's soundfonts from the public clips and weighted training renders toward them. The review policy allows both the public clips and these soundfonts (tests/task/review.py training_provenance); the held-out audio is rendered by FluidSynth from exactly FluidR3_GM, MuseScore_General, GeneralUser-GS and TimGM6mb (tests/task/pipeline/amt_render.py:26-30), so this specialises to the evaluation renderer.",
+    "Reviewer: full YourMT3 Perceiver-TF MoE encoder + T5 decoder fine-tuned on FluidSynth renders of Slakh2100-redux train MIDI."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "pegy8h",
+   "wallet": 200,
+   "official_score": 64.27,
+   "official_review": "pass",
+   "approach": "Fine-tuned YourMT3+ (Perceiver-TF MoE) on Slakh2100 train MIDI rendered with the matched GM soundfonts and effects settings, with batched segment inference to meet 50x real time.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[35] untouched MoE model 0.271 on public clips; [38] 'The errors are timbral'; [44] 'I've matched several clips to specific GM soundfonts (piano, pipe, organ, strings)'.",
+    "Identified the held-out renderer's soundfonts from the public clips and weighted training renders toward them. The review policy allows both the public clips and these soundfonts (tests/task/review.py training_provenance); the held-out audio is rendered by FluidSynth from exactly FluidR3_GM, MuseScore_General, GeneralUser-GS and TimGM6mb (tests/task/pipeline/amt_render.py:26-30), so this specialises to the evaluation renderer.",
+    "Reviewer: YourMT3+ Perceiver-TF MoE at a pinned revision, fine-tuned on renders of training/logs/slakh_redux_splits.json train tracks."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "bukin9",
+   "wallet": 10,
+   "official_score": 28.8,
+   "official_review": "pass",
+   "approach": "Two from-scratch CRNN onset/frame models trained on Slakh2100 train audio plus FluidSynth renders of Lakh MIDI, ensembled with per-class thresholds tuned on the public clips.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: from-scratch ensemble of two log-mel CNN + BiGRU onset/frame models; Slakh2100-redux train + Lakh MIDI renders; per-class thresholds tuned on the public clips (allowed).",
+    "[243] final ensemble 0.6145 on public clips; graded 0.6818."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "3zcox2",
+   "wallet": 50,
+   "official_score": 47.2,
+   "official_review": "pass",
+   "approach": "From-scratch conv-Transformer onset/frame model trained on Slakh2100 train plus Lakh MIDI rendered with the soundfonts it matched to the public clips; 19 points above Fable's other two runs, which did not match soundfonts.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[28] 'the hidden test set likely uses MIDI rendered with varied General MIDI soundfonts'; [52] 'piano aligns with GeneralUser GS, organ with FluidR3's accordion, and pipe with GeneralUser GS's recorder'.",
+    "Identified the held-out renderer's soundfonts from the public clips and weighted training renders toward them. The review policy allows both the public clips and these soundfonts (tests/task/review.py training_provenance); the held-out audio is rendered by FluidSynth from exactly FluidR3_GM, MuseScore_General, GeneralUser-GS and TimGM6mb (tests/task/pipeline/amt_render.py:26-30), so this specialises to the evaluation renderer.",
+    "Reviewer: from-scratch conv + 6-layer Transformer, Slakh2100 train + Lakh MIDI renders + public clips for calibration."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "1926qx",
+   "wallet": 200,
+   "official_score": 28.12,
+   "official_review": "pass",
+   "approach": "Ensemble of three from-scratch conv-Transformer onset/frame models trained on Slakh2100 train audio and randomized renders through 14 soundfonts; no targeting of the test soundfonts.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: ensemble of three log-mel conv + RoPE Transformer models; Slakh2100 train (1289 tracks) + FluidSynth renders with 14 soundfonts ([65]).",
+    "[194] '0.525 macro F1 on the public clips'; graded 0.6787."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "1ytf2u",
+   "wallet": 10,
+   "official_score": 49.43,
+   "official_review": "pass",
+   "approach": "Four from-scratch residual CNNs trained on procedurally generated music rendered through GM soundfonts (including the matched ones) and on the 10 public clips, ensembled with per-class weights, in 2.2 hours for $7.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[31] 'the recorder example strongly matches the GeneralUser sound bank'.",
+    "Identified the held-out renderer's soundfonts from the public clips and weighted training renders toward them. The review policy allows both the public clips and these soundfonts (tests/task/review.py training_provenance); the held-out audio is rendered by FluidSynth from exactly FluidR3_GM, MuseScore_General, GeneralUser-GS and TimGM6mb (tests/task/pipeline/amt_render.py:26-30), so this specialises to the evaluation renderer.",
+    "Reviewer: four residual CNN onset/frame nets, procedurally rendered music from FluidR3, TimGM6mb, GeneralUser GS, MuseScore General, SGM plus the supplied public examples (allowed)."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "1bd14o",
+   "wallet": 50,
+   "official_score": 73.36,
+   "official_review": "pass",
+   "approach": "A large ensemble of onset/frame networks on MT3 and YourMT3 encoders plus autoregressive decoders, trained on procedural GM-soundfont mixtures, Slakh train MIDI renders and the public clips.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[24] synthetic training examples from public GM soundfonts; [113] 'The sound comparison found strong matches for the supplied piano, accordion and recorder clips in soundfonts already used for training'.",
+    "Identified the held-out renderer's soundfonts from the public clips and weighted training renders toward them. The review policy allows both the public clips and these soundfonts (tests/task/review.py training_provenance); the held-out audio is rendered by FluidSynth from exactly FluidR3_GM, MuseScore_General, GeneralUser-GS and TimGM6mb (tests/task/pipeline/amt_render.py:26-30), so this specialises to the evaluation renderer.",
+    "Reviewer: ensemble of 9 dense onset/frame networks (MT3-encoder, harmonic and YourMT3-encoder variants) plus MT3 autoregressive decoders; procedural GM mixtures, the public clips and Slakh MIDI-only train renders."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "my6vry",
+   "wallet": 200,
+   "official_score": 76.72,
+   "official_review": "pass",
+   "approach": "Three from-scratch harmonic-STFT CNN onset/frame models trained on random procedural compositions rendered through six GM banks (including the test ones) plus the public clips, calibrated on fresh synthetic sets; top score of the task.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[27] 'checking how closely sampled instrument sounds explain the supplied audio'; [48] trains on the supplied clips ('Since those clips are also used in training, that is a development result'); [90] six sound banks.",
+    "Identified the held-out renderer's soundfonts from the public clips and weighted training renders toward them. The review policy allows both the public clips and these soundfonts (tests/task/review.py training_provenance); the held-out audio is rendered by FluidSynth from exactly FluidR3_GM, MuseScore_General, GeneralUser-GS and TimGM6mb (tests/task/pipeline/amt_render.py:26-30), so this specialises to the evaluation renderer.",
+    "Reviewer: three NoteNet CNNs with harmonic STFT front end, trained on random compositions rendered with public SF2 banks plus the 10 public clips; 81 MB package."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "4w4f7a",
+   "wallet": 10,
+   "official_score": 12.64,
+   "official_review": "pass",
+   "approach": "Ensemble of five pretrained/fine-tuned transcribers (YourMT3+, MuScriptor) fused per note, with fine-tuning on FluidSynth renders of Slakh train MIDI.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: five shipped checkpoints (fine-tuned YourMT3+ multi, YourMT3 single, MuScriptor small, and others) run locally; FluidSynth corpus from Slakh2100-redux train MIDI only."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "2co5hq",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Fused three pretrained transcribers with a small learned note-instrument MLP trained on 130 train tracks and the public clips; ended 0.011 below the untouched-YourMT3+ floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: MuScriptor medium + fine-tuned YourMT3+ YPTF+Multi + YourMT3+ MoE fused by a learned NoteInstrumentMLP; training data only DreamyWanderer Slakh/URMP/MusicNet train files (130 tracks) + public clips.",
+    "Raw macro onset F1 0.542 is below the floor of 0.553 (untouched YourMT3+, tests/task/task.yaml:58-63), so the score clamps to 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "1jiy3d",
+   "wallet": 200,
+   "official_score": 38.34,
+   "official_review": "pass",
+   "approach": "Trained new note heads on top of frozen YourMT3+ and MuScriptor encoders using FluidSynth renders of Slakh train, Lakh and classical MIDI.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: frozen YourMT3+ MoE and PTF encoders plus MuScriptor-small, trained MHLFHead heads on synthetic renders from Slakh train, Lakh shards and a classical MIDI set; download_data.py filters out validation/test/omitted."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3kt5d8",
+   "wallet": 10,
+   "official_score": 4.59,
+   "official_review": "pass",
+   "approach": "Fine-tuned YourMT3+ on Slakh train renders and grafted it with the zero-shot checkpoint; barely above the floor (raw 0.574).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: two YourMT3+ T5 transcribers re-implemented (one fine-tuned, one zero-shot) with a graft between them; Slakh train renders, Slakh redux train mixtures and the public clips."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "u96smp",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "From-scratch CRNN on Slakh train audio and re-renders; far below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: from-scratch CRNN (4 conv blocks + BiGRU) on Slakh2100 train plus FluidR3/MuseScore re-renders, checkpoint soup.",
+    "Raw macro onset F1 0.289 is below the floor of 0.553 (untouched YourMT3+, tests/task/task.yaml:58-63), so the score clamps to 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "2i2iw4",
+   "wallet": 200,
+   "official_score": 13.32,
+   "official_review": "pass",
+   "approach": "From-scratch CRNN trained on Lakh MIDI rendered with three GM soundfonts (two of them the test banks, chosen generically), spending under 2% of the wallet.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: from-scratch 4-block CNN + BiGRU, Lakh MIDI lmd_full rendered with FluidR3_GM, TimGM6mb and MuseScore General; spent $2.70 of $200."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "32kmor",
+   "wallet": 10,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "From-scratch CRNN on Slakh train MIDI rendered with GM soundfonts; the model never learned class-aware onsets well (raw 0.09).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing message: from-scratch 13.2M CRNN, 30,000 steps on re-rendered Slakh2100-redux train MIDI with five GM soundfonts, thresholds tuned on 48 dev clips.",
+    "Its own public-clip checks were also low (late log: 'public clips — matches the offline 0.1275'), so the 0.091 graded result is not an infrastructure loss.",
+    "Raw macro onset F1 0.0907 is below the floor of 0.553 (untouched YourMT3+, tests/task/task.yaml:58-63), so the score clamps to 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "22b8fq",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "From-scratch U-Net onset/sustain model on Slakh train audio and FluidR3/TimGM6mb re-renders with per-class thresholds; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing message: from-scratch 7.5M U-Net, Slakh2100 train rendered three ways, thresholds calibrated on the public clips; 'Public-clip official metric: 0.3878'.",
+    "Raw macro onset F1 0.4253 is below the floor of 0.553 (untouched YourMT3+, tests/task/task.yaml:58-63), so the score clamps to 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "6q9l05",
+   "wallet": 200,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Ensemble of three from-scratch Onsets-and-Frames models on Slakh-train renders; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing message: three from-scratch Onsets-and-Frames nets on about 1,100 hours of FluidSynth renders of Slakh train MIDI, logit-space fusion and per-class thresholds.",
+    "Raw macro onset F1 0.3581 is below the floor of 0.553 (untouched YourMT3+, tests/task/task.yaml:58-63), so the score clamps to 0."
+   ],
+   "confidence": "high"
+  }
+ ]
+}

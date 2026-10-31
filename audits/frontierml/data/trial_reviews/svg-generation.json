@@ -1,0 +1,352 @@
+{
+ "task": "svg-generation",
+ "task_level": {
+  "spec_issues": [
+   "The reviewer rubric names the held-out source, the SVGenius text-to-SVG benchmark, but the agents are not told it (tests/task/review.py:21-24). CONTRACT.md:3 only says 'don't train on any public text-to-SVG evaluation suite'. Several agents saw xiaoooobai/SVGenius or OmniSVG/MMSVGBench in Hugging Face search listings (Fable 5uus6j, DeepSeek 3r8r1s, Argon 5tnbkq [104]). None downloaded them, so the gap did no harm here.",
+   "The 30 public examples are all in the 'simple' stratum. The held-out set of 254 is macro-averaged over complexity groups (CONTRACT.md:11; the self-check warns that 'The public examples are simple icons only'). The 30 public examples are therefore a poor guide to the score. Agents that relied only on them (Muse 4nyu6t, Muse 32wvxy) fell below the floor.",
+   "Training on the provided examples and selecting with them are explicitly allowed (prompt; review.py:25-26). Distillation from teacher models through Spin OpenRouter is allowed (review.py:18). Scaling lm_head and averaging the session's own adapters are allowed (review.py:15-17). Opus i9hng5 scaled lm_head by 0.625 'which mathematically mimics T=0.8 sampling while reporting as T=0.5' [158]. That is within the rule."
+  ],
+  "verifier_issues": [
+   "Score = (raw - 0.1885) / (0.7535 - 0.1885), clamped to [0, 1] (tests/task/task.yaml:93). The floor is untouched gpt-oss-20b at temperature 0.5. It is the mean of two runs, 0.1955 and 0.1815 (task.yaml:95-98), so the floor itself moves by about 0.014 raw, or 2.5 points. The contract adds that 'grading the same weights twice can differ by about 0.01 in the raw score'.",
+   "8 of 18 trials have raw scores below the floor and score exactly 0 (raw 0.041 to 0.173). The clamp hides how much worse than the base model they are. Four more trials sit within one floor-noise band of 0: Fable 5uus6j 0.2038, Argon 5tnbkq 0.2036, Fable 23ajzb 0.1996 and DeepSeek 3r8r1s 0.1995. Their scores of 1.9 to 2.7 are not distinguishable from 'no gain'.",
+   "The judge (gpt-6-sol) can be called through the agents' own Spin OpenRouter key. Several trials used it to filter teacher samples or pick checkpoints: Fable 4vubq5 [35] 'best-of-2 selection by the gpt-6-sol judge'; Opus 2y9b1x and 6b1uc5 filter on rubric grades; DeepSeek kei48h [505] 'The actual judge model openai/gpt-6-sol IS available'. Nothing forbids it, but those trials optimised directly against the grader's own model.",
+   "A Spin OpenRouter outage on 2026-10-21 ('All models return 409', DeepSeek kei48h [537]; 24zhyt's closing message: 'The gpt-6-sol judge proxy was down at submission time') stopped both DeepSeek trials judging their final models. Both were already far below the floor on their own measurements, so the outage did not change their scores."
+  ],
+  "noise": "Wallets order sensibly for Opus (0, 5.2, 18.0) and Astra (0, 8.3, 14.0). Fable is non-monotone (2.7, 2.0, 20.3), but its $10 and $50 trials are both within floor noise. Argon (0, 2.7, 0), Muse (0, 0, 0) and DeepSeek (1.9, 0, 0) never clearly beat the base model. With about 1.8 points of grading noise and 2.5 points of floor noise, the $10 'winner' (Fable 2.7 vs DeepSeek 1.9) is a coin flip, and the $200 order (Fable 20.3 vs Opus 18.0) is about one noise unit apart. Only the $50 margin (Astra 8.3 vs Opus 5.2) and the separation of the $200 top three from the rest are robust.",
+  "elicitation": "Muse underspent badly. It used $36 of $200 in 4.2 h (4nyu6t) and $21 of $50 (j6w17x), with weak teachers (gemini-2.5-flash) or public icon corpora, and submitted below the floor. DeepSeek (Claude Code, max effort) spent little on GPUs and SFT'd on large public icon corpora (svgen-500k, Iconify, svg-stack), which degraded the model (3r8r1s found 'A full SFT on svg-stack ... collapses the model'). Astra's harness offers multi-agent tools. 5yr6t0 used wait/subagent calls (25), but nothing irregular came of it. Argon trajectories are not in chronological step order (5f60ys steps 1-1635 interleave two sessions; the submit is at step [1057], 02:28 UTC, after the last-numbered step [1635] at 00:44). The DeepSeek reviews were skipped by the operator. I reviewed all three: no rule violations.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "No false positive, false negative or infrastructure zero was found. All 8 zeros are honest below-floor results, and the reviewer's three passes and the three DeepSeek skips all hold up. The $10 winner (Fable 2.7 vs DeepSeek 1.9) and the $200 winner (Fable 20.3 vs Opus 18.0) are within the scorer's own noise, but that is noise, not a scoring defect.",
+  "science_vs_gaming": "No gaming. Every positive score came from distilling a frontier teacher (mostly gpt-6-luna) into LoRA adapters on synthetic instructions spread over complexity tiers, then merging and averaging. The decisive factors were teacher quality, enough data, and fixing failure modes (over-long or unterminated SVGs, schema violations). Two ideas were small and task-specific: Fable 23ajzb numbered top-level element ids so the model could count elements and stop, and Astra 5pavh1 put part labels and a completion marker in SVG comments. The best result reached only 20% of the way from the base model to the references."
+ },
+ "trials": [
+  {
+   "model": "claude-fable-5-1",
+   "trial": "5uus6j",
+   "wallet": 10,
+   "official_score": 2.7,
+   "official_review": "pass",
+   "approach": "LoRA (attention + experts) SFT on about 2,300 gpt-6-luna teacher SVGs for instructions generated by gpt-6-luna, plus MMSVG-Illustration train-shard captions; two stages, merged to bf16. Raw 0.2038, within floor noise.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'captions from MMSVG-Illustration train shard 00000 ... An HF search listing at trajectory#24 showed OmniSVG/MMSVGBench and xiaoooobai/SVGenius, but nothing indicates either was downloaded'",
+    "[34] 'gpt-6-luna wins on quality-per-cost'; [146] stage-2 adapter chosen on base 0.20 -> 0.34 diagnostic mean on the provided examples (allowed)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "3r8r1s",
+   "wallet": 10,
+   "official_score": 1.9,
+   "official_review": "skipped",
+   "approach": "Abandoned SFT on svg-stack, which collapsed the model. Instead self-distilled: a small LoRA trained on the base model's own samples, with a numeric viewBox inserted into the 13% of answers that lacked one. Raw 0.1995, within floor noise. Review skipped; I found no violation.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing message: 'A full SFT on svg-stack SVG targets ... collapses the model — judge mean 0.061 vs the base's 0.398 ... ~13% of its answers omit a numeric viewBox'",
+    "Data: svg-hub/svg-stack-annotated train-split instructions plus the 30 provided examples; the val/test parquet paths appear only in a file listing (trajectory lines 2656-2700), not in downloads"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "i9hng5",
+   "wallet": 10,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "gpt-6-luna distillation on about 2,500 synthetic instructions, attention+expert LoRA, two runs. At export it scaled lm_head by 0.625 to mimic sampling at T=0.8. Raw 0.1649, below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[158] 'build the final model with lm_head scaled by 0.625, which mathematically mimics T=0.8 sampling while reporting as T=0.5' (allowed by review.py:15-17; the reviewer noted 'A logit rescale on top of a real finetune does not break the finetuned-from-base requirement')",
+    "[143] looping path data hit the token cap on harder prompts"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "2hht7i",
+   "wallet": 10,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "LoRA plus full-rank router/norm updates on public SVG training corpora (InternSVG SVG-Sophia and SAgoge, OmniSVG MMSVG-Icon and Illustration, SVGX-Core-250k) and synthetic SVGs. Shipped a 0.85/0.15 blend of stage 2 and stage 1. Raw 0.1045, below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'public training splits of InternSVG/SVG-Sophia, OmniSVG MMSVG-Icon and MMSVG-Illustration, xingxm/SVGX-Core-250k and InternSVG/SAgoge'",
+    "Train splits are allowed; SVGenius never appears"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "29hykn",
+   "wallet": 10,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "Attention LoRA then attention+expert LoRA (300 steps) on deepseek-v4-pro teacher outputs, the 30 examples and Twemoji compositions. Merged at strength 0.9. Raw 0.070, far below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'merges the deltas into that bf16 base at strength 0.9'; sources 'deepseek-v4-pro teacher outputs ... Twemoji at a pinned revision'",
+    "Self-checks 1-2 failed on invalid SVGs; 3 passed [395]"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "32wvxy",
+   "wallet": 10,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "Attention-only LoRA (r64), 2,041 steps, on public icon corpora (vinoku89 train, IconGenAI, SVGX-SFT GEN_51k, animal train split), procedural scenes, and the 30 examples repeated 24 times. No judge-based evaluation. Raw 0.072, far below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'data_build.log shows the vinoku89 test split was never downloaded'",
+    "Closing: 'Visual A/B on 34 prompts showed stage 2 ahead' (no quantitative judge)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "5pavh1",
+   "wallet": 50,
+   "official_score": 8.3,
+   "official_review": "pass",
+   "approach": "Teacher drawings generated in the session, audited for fidelity, and given numbered part labels plus a completion marker in SVG comments to teach stopping. LoRA on attention and MoE experts, 962 steps. Picked the five-pass checkpoint over follow-ups on the provided examples and independent synthetic holdouts.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[236] 'adding numbered part labels and an explicit completion marker inside the training SVG comments'",
+    "[629] 'The earlier five-pass checkpoint retained the highest measured combined score ... selected it'",
+    "Grade check: data_provenance.json 'explicitly exclude public datasets, evaluation suites and external checkpoints'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "6b1uc5",
+   "wallet": 50,
+   "official_score": 5.2,
+   "official_review": "pass",
+   "approach": "Self-distillation: the model's own samples on gpt-6-luna-generated instructions, filtered by rubric grades, LoRA on attention + all experts (r6). All 4 self-checks failed on one invalid SVG out of 16; submitted anyway.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'Answers are the model's own samples, selected by rubric grades from the judge (data/samples_*, data/judged_*, data/sft_self3.jsonl)'",
+    "Self-checks 1-4 each failed 'valid SVG (batch): 1 of 16 answers are not valid SVG' (unsupported attribute/element)",
+    "[261] r6 swapped in to fix invalid <marker> arrowheads"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5tnbkq",
+   "wallet": 50,
+   "official_score": 2.7,
+   "official_review": "pass",
+   "approach": "Synthetic instructions with teacher SVGs from OpenRouter models, filtered and 'upgraded' by teacher grades, plus the curated 30 examples. LoRA on attention and experts; shipped a 0.5/0.5 SWA blend at global scale 0.7. Raw 0.2036, within floor noise.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'merged the session's own run_v2 adapter_step_0200 and run_v2 adapter_final as a 0.5/0.5 delta-W SWA blend with global_scale 0.7'",
+    "[104] HF SVG dataset listing only; nothing downloaded"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "23ajzb",
+   "wallet": 50,
+   "official_score": 2.0,
+   "official_review": "pass",
+   "approach": "Teacher bake-off (gemini-3.8-flash, gpt-6-luna, space-bunny-alpha), then LoRA SFT. v1 produced SVGs over 32 KiB; v4 gave every top-level element an id and stated the element count up front to teach stopping. Raw 0.1996, within floor noise.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[133] 'V1 ... 2 of 16 batch answers exceeded the 32 KiB SVG limit'",
+    "[158] v4 'numbers each top-level element with an id and states the element count upfront to give the model an explicit stopping counter'",
+    "Self-check 2 passed at 8h47m; submitted v4 [209]"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "kei48h",
+   "wallet": 50,
+   "official_score": 0.0,
+   "official_review": "skipped",
+   "approach": "Five LoRA SFT phases on 32k Iconify icons with gemini captions, procedural SVGs, synthetic gemini-drawn scenes and the 30 references (repeated 40 times). Used gpt-6-sol as its own judge until the Spin proxy outage. Raw 0.096, below the floor. Review skipped; no violation found.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "[449] 'v2's public scores are near-perfect (as expected: memorized)'; [518] 'v2 on the 12 custom (unseen) prompts: mean 0.028'",
+    "[537] 'All models return 409 — the entire inference installation is temporarily unavailable' (Spin outage; it blocked evaluation, not grading)",
+    "No benchmark or eval-suite data: its StarVector/SVG-Bench/SVGenius mentions are reasoning about what to avoid ('text-to-SVG evaluation suites excluded — e.g., StarVector's SVG-Bench, \"SVGenius\"')"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "j6w17x",
+   "wallet": 50,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "Attention LoRA plus custom per-expert LoRA on 1,114 gpt-5.6-luna teacher SVGs, MDI and Lucide icons, programmatic geometry, and the 30 examples repeated 6 times. Spent $21 of $50. Raw 0.145, below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing: '1,114 teacher SVGs from openai/gpt-5.6-luna ... (chosen after visual comparison of 12 candidate teachers)'; 'Budget spent: $21.38/$50'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "4vubq5",
+   "wallet": 200,
+   "official_score": 20.3,
+   "official_review": "pass",
+   "approach": "Teacher bake-off over 6 models. gpt-6-luna drew SVGs for Claude-written instructions in three complexity tiers, with best-of-2 selection by the gpt-6-sol judge. Per-expert custom LoRA plus attention LoRA, 224 steps, merged. Kept stage 1 because stage 2 scored worse. Best $200 score.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[35] 'use it as the main teacher with best-of-2 selection by the gpt-6-sol judge' (grader's judge model used as a data filter; allowed)",
+    "[136] 'public score 0.476 with zero invalid outputs (base 0.268)'; [148] 'Stage 2 doesn't improve on stage 1 (public 0.33 vs 0.48 ...), so I'll keep the stage-1 model'",
+    "Grade check: no SVGenius or HF dataset used"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "2y9b1x",
+   "wallet": 200,
+   "official_score": 18.0,
+   "official_review": "pass",
+   "approach": "Claude Sonnet 5.5 wrote 5,493 instructions in 57 categories. gpt-6-luna drew SVGs with a short plan placed in the reasoning channel. LoRA on attention and experts, chained runs r3 to r8. The shipped weights average the 8- and 10-epoch deltas.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[311] 'Claude Sonnet 5.5 wrote 5,493 synthetic drawing instructions across 57 categories ... gpt-6-luna drew an SVG for each, with a short plan'",
+    "Grade check: 'export_soup.py writes W_base + (Δr7 + Δr8)/2'",
+    "Self-check 2 failed (one SVG > 32 KiB); 3 and 4 passed"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "5yr6t0",
+   "wallet": 200,
+   "official_score": 14.0,
+   "official_review": "pass",
+   "approach": "Distillation from Spin teacher models on per-category synthetic prompts, plus qwen3-vl captions of Lucide/Twemoji art. Two LoRA runs (500 + 3,072 steps); shipped a 'blend75' combination of the two adapters' low-rank factors.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'The final blend75 checkpoint is a weighted concatenation of the low-rank factors from those two in-session adapters only'",
+    "Lucide and Twemoji downloaded from codeload.github.com at pinned revisions [276]"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "24zhyt",
+   "wallet": 200,
+   "official_score": 0.0,
+   "official_review": "skipped",
+   "approach": "3,000-step SFT (attention, router and expert LoRA) on the svgen-500k / SVG-Repo icon corpus with 46k gemini captions plus templated icon-name instructions. Quality fell far below the base model (raw 0.041). Review skipped; no violation found.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "Closing: 'cleaned/deduplicated SVG-Repo icon corpus (pin f867dacd…), paired with 46k Gemini-generated instruction captions'; 'The gpt-6-sol judge proxy was down at submission time'",
+    "Data: umuthopeyildirim/svgen-500k train parquet and starvector/svg-stack train; no evaluation suite"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5f60ys",
+   "wallet": 200,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "Synthetic teacher SVGs and on-policy data. Short LoRA run (74 steps), then EMA, then 0.25*base + 0.75*run4 scaling. Raw 0.1726, below the floor. The trajectory spans a context-compaction restart. The steps are not in time order, but the session did submit (step [1057], 02:28 UTC).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade check: 'make_run4_s075.py's 0.25*base + 0.75*run4 scaling'",
+    "[1057] 'frontier submit --confirm' -> 'Submitted at 2026-10-15 02:28:29 UTC'; [1633] compaction notice; [1634] 'All your subagents and background tasks have been stopped due to server restart' (the harness recovered, so no infrastructure effect on the score)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "4nyu6t",
+   "wallet": 200,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "LoRA (r32, all-linear) on 914 gemini-2.5-flash teacher pairs plus the 30 examples repeated 3 times. Submitted after its only self-check failed (1 invalid of 16), having spent $36 of $200 in 4.2 h. Raw 0.124, below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Self-check 1 failed 'valid SVG (batch): 1 of 16 answers are not valid SVG ... Only simple colors and internal fragment paint references are allowed'",
+    "[169]-[170] frontier submit --confirm at 22:49 UTC, 4.2 h into a 12 h run"
+   ],
+   "confidence": "high"
+  }
+ ]
+}

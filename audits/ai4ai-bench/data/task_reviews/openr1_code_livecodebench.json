@@ -1,0 +1,515 @@
+{
+ "task": "openr1_code_livecodebench",
+ "task_level": {
+  "rubric_code": "FN",
+  "confirmed": true,
+  "counted_toward_threshold": true,
+  "hidden_data_integrity": [
+   "Final v6 rows are mounted only in score (declaration.py:112-118; assets.lock.yaml:141-142). Explore gets only public v4/v5 (declaration.py:23-50), retrain gets no LiveCodeBench at all (declaration.py:52-69), and network_mode = no-network (task.toml:32). The evaluator refuses to fall back to public rows (final_eval.py:100-120).",
+   "Proxy and final do not overlap. The proxy and confirmation slices are drawn from test4/test5 (assets.lock.yaml:99,108-113); the final is test6 only (final_eval.py:36-41), a separate release, disjoint by construction. No cross-file question_id check exists between the public and final assets (grade.py:115-127 only dedupes within one call); this matters only if LCB re-released a problem, which it does not do.",
+   "test6 is public on the HF Hub at the pinned commit (assets.lock.yaml:160-162), and frontier agents may know 2025 LCB problems. However, the patch gate (orchestrator/task.py:931-1001) and no-network rules limit injection, and every case page reports literal searches finding no v6 content in the trajectory or patch.",
+   "UNCONFIRMED contamination between the training corpus and the final: the corpus is open-r1/codeforces-cots 'solutions_py_decontaminated' (assets.lock.yaml:57-84), but the task performs no overlap check of its own against test6, unlike BTRM. Risk is low: v6 problems date from 2025 and are drawn mostly from LeetCode/AtCoder, and the corpus is Codeforces."
+  ],
+  "scorer_issues": [
+   "The public final evaluator does not match the instruction or the published scores. instruction.md:23,27 describe 10 samples per problem at T=0.2, top-p 0.95, scored as c/n over 1,750 samples. The pinned code generates greedy n=1 (grade.py:1-8,197-244), passes one sample per problem (grade.py:294-297), records do_sample False and n 1 (final_eval.py:187-188), and scores correct/175 (grade.py:333-336). Published scores have denominator 1,750 (e.g. 0.1274286 = 223/1750 on the case pages), so they were not produced by the code at 5ced1e2.",
+   "The vLLM eval image README claims /opt/harness is carried over 'byte for byte' and that 'the only change is the generation backend' (environment/README-eval-image.md:20-31; Dockerfile.eval:15-25). No sampled vLLM generate path exists in this task's harness, so the scorer behind the published numbers is not public: a reviewability and consistency gap.",
+   "Case pages report that agents saw a legacy 'greedy v6 first128' final description, and that all checkpoints were later rescored under full175 (protocol change effective 2026-08-20). All 29 cells were rescored on one protocol, so they remain mutually comparable (2b caveat, not score-changing).",
+   "The 64-row exploration proxy has recorded rank correlation 0.0 with the reference ordering (assets.lock.yaml:119-125), so agents explored with an almost uninformative proxy. This is not a scoring defect, but it helps explain why most submissions are near-baseline schedule tweaks.",
+   "No reward-hacking route was observed. Pass requires every official test to be > 0 (grade.py:247-278), which matches LCB upstream."
+  ],
+  "anchor_issues": [
+   "The paper baseline of 0.127 (scripts/score.py:18) and the case pages' shipped reference of 0.12743 (one run, 223/1750) sit above all six independent replays of the shipped recipe. Those replays have mean 0.12286, SD 0.00188 and range 0.1200-0.1257 (instruction.md:36,41), so the reference fails against itself 6/6. The task file itself replaced the single-run reference with the six-replay mean.",
+   "Effect: with b = 0.12286, cells below baseline drop from 25 to 14 (13 scored plus the OOM cell); 11 cells flip beat/miss. Task mean sigma goes 0.0913 -> 0.0947 (about +0.003-0.0045 per cell), so the absolute sigma impact is small, but the paper's '25 of 29 below baseline' claim is largely an artifact of anchor placement.",
+   "Of the paper's 4 'above baseline' cells, only opus/low (0.1383) really exceeds the shipped reference. opus/high and terra/xhigh (0.1274286) tie it exactly and get sigma 0.1004 only because the anchor is rounded to 0.127. opus/xhigh's 0.128 comes from its 60-step baseline-style checkpoint.",
+   "u = 0 and o = 1 (pass@1) are sensible bounds, but sigma = 1 is far out of reach for a 1.5B model. In practice the task's sigma range is 0.076-0.112, so this task barely moves the aggregate."
+  ],
+  "noise": "n = 175 problems x 10 samples. The descriptive per-problem SE on the case pages is about 0.021-0.024 (grade.py:326-336 describes the unpaired binomial). The relevant run-to-run noise is replay SD about 0.0019, with re-scoring SD about 0.0002 (instruction.md:27,41). Baseline-equivalent 60-step checkpoints in the cells (opus/medium 0.1206, opus/xhigh 0.128, sol/xhigh 0.1223, sol/max 0.1229) suggest SD nearer 0.003. Most cells lie in 0.115-0.127, within about 2-3 replay SDs of the shipped mean, so their ordering is noise-sensitive. opus/low (+0.0155, about 5-8 SD) is the only clear gain; the bottom cells (0.096-0.108) are clearly worse.",
+  "checkpoint_selection": "The best checkpoint is not the last one in 18 of 28 scored cells. Task mean sigma is 0.0913 under best-of-3 vs 0.0882 under the last checkpoint. Against the 0.127 anchor, beat/miss flips in 2 cells (opus/high 0.1274 -> 0.1206; opus/xhigh 0.128 -> 0.1023); below-baseline count 25 -> 27 under last checkpoint. In opus/xhigh, opus/medium and terra/medium the best checkpoint is the 60-step (baseline-like) stage, not the submitted method's later output.",
+  "evidence": [
+   "/home/einsia/ai4ai-bench/tasks/openr1_code_livecodebench/instruction.md:23 (n=10, T=0.2, c/n protocol), :27 (replay SD 0.0019, rescoring SD 0.0002), :35-36 (start 0.09657, shipped 0.12286), :41 (six replays, SD 0.00188, range 0.1200-0.1257)",
+   "/home/einsia/ai4ai-bench/tasks/openr1_code_livecodebench/harness/grade.py:1-8,197-244,294-297,333-336 (greedy n=1 generation, one sample, score = correct/175)",
+   "/home/einsia/ai4ai-bench/tasks/openr1_code_livecodebench/harness/final_eval.py:36-41 (v6 only, 175 rows), :100-120 (no fallback), :187-188 (do_sample False, n 1)",
+   "/home/einsia/ai4ai-bench/tasks/openr1_code_livecodebench/environment/README-eval-image.md:20-31; environment/Dockerfile.eval:15-25 (claims n=10 via vLLM with harness unchanged)",
+   "/home/einsia/ai4ai-bench/tasks/openr1_code_livecodebench/declaration.py:23-50,52-69,112-118 (phase mounts)",
+   "/home/einsia/ai4ai-bench/tasks/openr1_code_livecodebench/environment/assets.lock.yaml:57-84 (decontaminated Codeforces subset), :99,108-125 (public v4/v5 slices; proxy rank correlation 0.0), :127-163 (final v6; earlier revisions used a 128-row prefix)",
+   "/home/einsia/ai4ai-bench/tasks/openr1_code_livecodebench/task.toml:19,32,44-46,56",
+   "audits/ai4ai-bench/scripts/score.py:18 (paper anchors 0.127/0/1)",
+   "case pages: shipped reference '0.12743'; opus-5/high and terra/xhigh best '0.1274286 (223/1750)'; opus-5/xhigh 'a 60-step baseline-style long-context pass'"
+  ],
+  "summary": "The OpenR1 baseline can be beaten within budget: opus/low's execution-verified self-training reached 0.1383, about 8 replay SDs above the shipped mean. Most agents only tuned the SFT schedule or hyperparameters and landed inside the shipped recipe's replay band. The confirmed defect is the anchor. The paper's 0.127 (= one run at 0.12743) sits above all six replays of the shipped recipe, which the task file itself reports as mean 0.12286, max 0.1257. The reference therefore fails against itself (FN), and '25 of 29 below baseline' becomes 14 under the task's own reference. The sigma impact is small (<= 0.0045 per cell) because the task's whole sigma range is compressed to 0.076-0.112. Data isolation holds: v6 is score-only, the proxy is v4/v5 and disjoint, and there is no network. The public scorer (greedy n=1, /175) cannot reproduce the published n=10 sampled scores (/1750), so the scoring code behind the leaderboard is not public. Training-corpus contamination is UNCONFIRMED and low risk."
+ },
+ "cells": [
+  {
+   "case": "claude__openr1_code_livecodebench__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 0.1274,
+   "approach": "Rounds of prompt-masked CoT SFT over fresh corpus slices (sampling, schedule and wall-clock changes). Labelled execution-verified, but the CoT branch passes rows through unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "best 0.1274 (case page: '0.12742857'), which is 223/1750: exactly the shipped reference 0.12743 that the case pages use, but counted above the rounded paper anchor 0.127 (sigma 0.1004)",
+    "last checkpoint 0.1206; best-of-3 decides the beat/miss label",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 0.1383,
+   "approach": "Phase A is shipped SFT. Phase B samples 8 programs per training problem, runs them against that row's own tests, keeps up to 2 passing programs, and re-SFTs on the accumulated verified pool (16 rounds of execution-filtered self-training).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "official best 0.1383 (last checkpoint), +0.0155 over the six-replay shipped mean 0.12286 (instruction.md:36,41), about 8 replay SDs",
+    "the only OpenR1 cell that clearly beats the shipped recipe; the technique is rejection-sampling fine-tuning / STaR",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 0.1246,
+   "approach": "Mixed targets (full trace, extracted code, budgeted brief), an executor that filters wrong teacher programs, and an internal greedy evaluator that ranks checkpoints.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1097/0.1246/0.1211",
+    "case page: 'the evidence cannot show that it beats the shipped recipe or is seed-stable'",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 0.1206,
+   "approach": "Stage 1 is the unchanged 60-step control, followed by rounds of sampled, executed and passing programs used as SFT targets. The official best is checkpoint 60, the control; the self-training rounds fell to 0.087-0.091.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'stage 1 is the unchanged 60-step control'; checkpoint-60 scored 0.1206",
+    "a replay of the shipped recipe landing at 0.1206, consistent with the 0.1200-0.1257 replay range in instruction.md:41",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 0.128,
+   "approach": "Three phases: a 60-step baseline-style long-context SFT pass, short fenced-program SFT, then execution-verified self-training. The official best is checkpoint 60 (the baseline-style pass); the method's own later checkpoints scored 0.1006 and 0.1023.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'a three-phase recipe: a 60-step baseline-style long-context pass, short fenced-program SFT, and execution-verified self-training'",
+    "checkpoints 60:0.128 / 2214:0.1006 / 2749:0.1023: the 'beats baseline' credit (0.128 > 0.127) comes from a replay of the shipped recipe at the top of its replay band, not from the submitted method",
+    "best-of-3 is allowed by the task rules (instruction.md:17), so the official computation is correct; the false positive is a noise pass, and the sigma effect is only about +0.001",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative. The audit fields do not address the checkpoint-60 issue."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 0.1126,
+   "approach": "Filters training rows by their own finish_reason and public tests; prompt-masked SFT with wall-clock scheduling.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1126/0.1109/0.1097",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 0.108,
+   "approach": "Data selection, length grouping and wall-clock schedule; same SFT objective.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1074/0.1069/0.108",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 0.1126,
+   "approach": "Filters by finish_reason and problem_type, length-batched, with wall-clock warmup and cosine. Same masked SFT.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1126/0.1103/0.112",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": null,
+   "approach": "group_by_length plus wall-clock cosine schedule. Formal replay hit CUDA OOM at optimizer step 444, so there is no artifact and sigma is 0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'failed at optimizer step 444 with CUDA OOM; no accepted artifact'",
+    "case page: 'The OOM was a recipe failure'; exploration peak memory already rose from about 193.6 to 228.3 GB",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 0.1137,
+   "approach": "Constant warmup over 60 steps, eval and save every 30, validation-NLL patience 6. Same SFT.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1137/0.1131/0.1131",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openr1_code_livecodebench__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 0.0989,
+   "approach": "Drops non-stop, dangling-thought, unfenced or too-short rows and supervises only the post-think answer. LR 2e-5, length 4,096, 2,500 steps.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.0989/0.0903/0.0926, about the fixed start 0.0966",
+    "benchmark audit: Agree in substance: the conduct field 'Suspected' tracks budget noncompliance, and no boundary leak was found in the code or on the case page."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 0.1217,
+   "approach": "720 steps, eval and save every 180, grouping off. Same SFT.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 0.1217/0.1166/0.1166",
+    "benchmark audit: Disagree with the Protocol exposure field 'Confirmed': the page's own narrative says 'no protocol exposure was found', and the code mounts no v6 rows outside scoring (declaration.py:23-50)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": 0.1154,
+   "approach": "LR 1e-5 to 3e-5, 500 steps, saves every 100.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1154/0.1126/0.1154",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 0.116,
+   "approach": "Masks everything except the code after the end-of-thought boundary (code-only targets). Same NLL.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1149/0.1143/0.116",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 0.1251,
+   "approach": "Supervises only the last fenced Python block, falling back to the whole completion.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1251/0.124/0.1217; inside the shipped replay band 0.1200-0.1257",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": 0.1257,
+   "approach": "120 steps with constant warmup, saves every 60 (schedule only).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1257/0.1257; at the top of the shipped replay band",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 0.1257,
+   "approach": "Completion SFT with a non-binding 100k-step ceiling and wall-clock stop (schedule and engineering only).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.0943/0.1217/0.1257",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 0.1263,
+   "approach": "Hyperparameter, schedule and checkpoint-policy changes to masked SFT.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "0.1263 is above all six published shipped replays (0.1200-0.1257) and their mean 0.12286 (instruction.md:41), but below the paper anchor 0.127 (scripts/score.py:18). Its below-baseline label depends on which anchor is used",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 0.1172,
+   "approach": "120-step cosine schedule, then LR held at 1e-6 until the wall clock.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1016/0.1016/0.1172; SE missing on the case page",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 0.1263,
+   "approach": "Portfolio: a 60-step shipped-equivalent branch (0.1229) and an independent long length-grouped SFT branch (0.1263 at 1352).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "the shipped-equivalent branch scored 0.1229, about the instruction's six-replay mean 0.12286",
+    "the best (0.1263) is above all published shipped replays but below the paper anchor 0.127",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 0.124,
+   "approach": "Exact first-60-step schedule, then staged low-rate cosine continuation to 900 steps.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1234/0.1234/0.124",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 0.1154,
+   "approach": "Schedule only: 1,000-step ceiling with cosine, saves every 250.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1154/0.1149/0.1131",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 0.1246,
+   "approach": "60-step full-completion branch (shipped-equivalent, 0.1223), an independent completion_clean branch (30 updates, the best at 0.1246), and a resumed long run (0.1131).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'supports a loadable, near-shipped candidate, not a stable improvement over shipped'",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": 0.108,
+   "approach": "8K context, LR 1e-6, warmup 0.02, 6,000 requested steps.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.108/0.1034/0.104",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": 0.1269,
+   "approach": "Supervises only the last fenced Python block (code-only target). Seeds and objective unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "0.1269 is above every published shipped replay and about +2.1 replay SDs over the shipped mean 0.12286 (instruction.md:41), but below the paper anchor 0.127",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 0.1269,
+   "approach": "LR 3e-6, effective batch 18, 1,200 requested steps, wall-clock stop.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "0.1269 is above every published shipped replay but below the paper anchor 0.127; case page: 'a final score that did not exceed the shipped recipe' (vs 0.12743)",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 0.1263,
+   "approach": "Optional finish-reason filter (disabled in formal), with a 720-step schedule. The best is checkpoint 60.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 60:0.1263 / 120:0.1251 / 720:0.1183; the best is the 60-step checkpoint, at the top of the shipped replay band and above the 0.12286 mean, below 0.127",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": 0.096,
+   "approach": "Schedule and checkpoint-policy repair only; no measured exploration best.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.0937/0.096/0.0937, below the fixed start 0.0966",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openr1_code_livecodebench__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 0.1274,
+   "approach": "Schedule, hyperparameters and wall-clock stop with a 1e6-step ceiling. Same masked SFT.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "best 0.1274 = 223/1750 (case page '0.1274286 (223/1750)'), exactly the shipped reference 0.12743; counted as a beat only because the paper anchor is rounded to 0.127 (sigma 0.1004)",
+    "benchmark audit: Agree: no final-set exposure (v6 is mounted only for scoring, declaration.py:112-118) and conduct fields match the narrative."
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

@@ -1,0 +1,85 @@
+{
+  "task": "zero-shot-classification",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "The task is well specified, OOD by construction (public rows are DBpedia-14; held-out rows are 22 named BTZSC datasets), and graded deterministically by shipped metric code. The issues are an uneven upstream-source rule that only the reviewer enforces, a self-check throughput batch about 1.75x lighter than grading, and per-dataset floors that double the noise on binary datasets.",
+  "noise_se_points": 1.3,
+  "floor": "Per dataset, uniform probabilities (argmax tie goes to the first label after a seeded shuffle, so effectively random), measured on the 4,400 held-out rows: raw 0.3212 overall (tests/task/task.yaml:40-68; pipeline/sanity_results.json). Each of the 22 components is clamped at 0, so below-chance datasets cannot subtract. It is a sensible blind floor. But no trained or off-the-shelf baseline was measured ('trained_model_baseline': null), and a frozen NLI zero-shot encoder with a new head already reaches about 47 (Astra 2pngu5).",
+  "ceiling": "One-hot gold = 1.0 per dataset (task.yaml:65-68). Not reachable for zero-shot (best observed 63.6). It is linear and non-binding, but compresses scores into the lower two-thirds.",
+  "usable_range": "observed 0-63.6 of 0-100 (wallet means 35.5 / 32.7 / 33.3); 13 of 57 trials are 0, 9 of them review fails",
+  "feasible_at_10": "yes: Fable 59.6, Opus 59.3 and Gemini 58.6 at $10, with Qwen3-4B LoRA plus a label head trained on public train splits. 50 docs/s with about 13 labels per document is easy on an H100.",
+  "budget_scaling": "None. The 19-model mean is 35.5 / 32.7 / 33.3 at $10 / $50 / $200 (mean compute $5.7 / $18.5 / $26.3). No top model improves monotonically. The binding constraint is clean data provenance, not compute.",
+  "selfcheck_fidelity": "Same runner, same 16 warm-ups, same 88 s deadline for 4,400 documents and same failure rule (verifier.py:239-276). But the public requests are DBpedia texts with 14 short labels. Held-out requests are about 1.75x larger in UTF-8 bytes (81 vs 34 bytes per label description; 2-72 labels per document). A server can pass self-check and miss grading's 88 s; the self-check prints a note about this (verifier.py:167-173). The static training audit runs in self-check, but the review, the usual zero here, does not. Self-check gives no score, and the public rows may not be used for selection anyway.",
+  "judge": "No LLM judge in the metric. The reviewer (Claude Opus 5.5, global) applies 5 checks. no_evaluation_data_use carries the long list of banned sources and derivatives (tests/task/review.py:12-27).",
+  "neutrality": "Sources are named openly (DATA_POLICY.md), so knowing BTZSC is not a hidden advantage. But BTZSC's NLI-style hypothesis descriptions differ from the public DBpedia label format ('This text describes a company.'; zsc_data.py:81-84), so agents that know the BTZSC templates can match the label-description style in training. The ban on 'TypeSafe's JEV' reproductions presumes the agent knows JEV; DATA_POLICY lists the repos. Strong reliance on large HF mixtures, plus the reviewer's judgement on obscure mirrors (Fable 4zb5b5 zeroed for FinanceInc/auditor_sentiment = Financial PhraseBank), adds model-independent but high-variance zero risk.",
+  "reference_solution": "The shared smoke fixture returns uniform probabilities (solution/server.py:86): 0 normalised (it is the floor), and it fails the task_time_training review check. It does not show solvability; the trials do.",
+  "issues": [
+    {
+      "category": "spec",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The upstream-source rule is uneven. DATA_POLICY and the rubric name other-name derivatives for Rotten Tomatoes (SST, MR, subj) and TrueTeacher (CNN/DM, FactCC, FRANK, SummEval). They name none for Social Bias Frames (built from Davidson, Founta, Waseem & Hovy, Stormfront), MASSIVE (SLURP) or Yelp. Agents split: Opus 2bb9rl and 3jhxni excluded these corpora, while Fable 42xw3e and 1w83ln and Opus 1j4hzb trained on Davidson. Everything passed review, consistently. Meanwhile a re-host under another name (FinanceInc/auditor_sentiment) is a zero.",
+      "evidence": [
+        "tests/task/pipeline/DATA_POLICY.md:10 '- Social Bias Frames (intent, offensiveness and sexual-content variants).'",
+        "tests/task/review.py:18-22 names SST/MR/subj and CNN/DailyMail derivatives only",
+        "tests/task/review.py:13-14 'mirrors, subsets, paraphrases'"
+      ],
+      "affects": "Agents reading the rule strictly (Opus 2bb9rl, 3jhxni) give up legal data; under a strict reading Fable's $10/$200 and Opus's $50 wins would be void. Per-dataset SBF scores show no measurable gain."
+    },
+    {
+      "category": "gate",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "Self-check under-loads the throughput gate. Public requests carry 14 short labels; held-out requests are about 1.75x larger (longer descriptions, up to 72 labels). A cross-encoder that scores every text-label pair can pass self-check and miss the 88 s all-or-nothing deadline. The self-check note discloses this. Four non-audited trials scored 0 with review pass (Sonnet $200, Gemini 3.8 Flash $50, MiniMax $50, Muse Spark $50); their causes are not in the audit data, and a gate miss is plausible (suspected).",
+      "evidence": [
+        "tests/task/verifier.py:167-173 'held-out requests are about 1.75 times as large in UTF-8 bytes ... needs more than 75% to spare'",
+        "tests/task/zsc_protocol.py:182-183 'deadline_seconds': count / 50, 'passed': elapsed <= ...",
+        "tests/task/verifier.py:96-97 'Scored batch must sustain at least 50 documents/second'"
+      ],
+      "affects": "Agents that serve cross-encoders, or that tune to self-check margins, downward."
+    },
+    {
+      "category": "anchor",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Per-dataset floors make the noise uneven. Binary datasets have floors of about 0.51 (amazonpolarity, imdb, rottentomatoes, yelp, wikitoxic_*), so their (raw - floor) / (1 - floor) roughly doubles each binary dataset's noise and its weight in score differences. With 200 rows per dataset, simulated per-dataset normalised SD is about 6 points for binary and 4 for 10-class datasets, giving SE of about 1.1-1.5 for the 22-dataset mean. Related datasets reuse texts (4 wikitoxic, 3 biasframes = 32% of weight), so the effective number of independent datasets is smaller.",
+      "evidence": [
+        "tests/task/task.yaml:44 'amazonpolarity ... floor: 0.5221149034130718'",
+        "tests/task/zsc_data.py:168 'Related held-out datasets reuse texts; bootstrap by shared text.'"
+      ],
+      "affects": "Close comparisons: the $10 three-way tie (59.6 / 59.3 / 58.6) is within noise."
+    },
+    {
+      "category": "heldout",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The held-out rows are a 200-row hash sample of BTZSC's public test parquets (btzsc/btzsc), and the dataset is named to the agent, so leakage control is review-only. The organisers' own manifest also leaves licence status open: 'BTZSC redistribution license audit pending', although the held-out set is redistributed publicly.",
+      "evidence": [
+        "tests/task/pipeline/source_lock.json:8-14 'btzsc/btzsc' test parquet",
+        "tests/task/zsc_data.py:168 'BTZSC redistribution license audit pending'"
+      ],
+      "affects": "All equally; it is a licence and integrity risk rather than a ranking bias."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Fine as designed. Macro-F1 over the union of gold and predicted classes, top-label 15-bin ECE and the product are implemented as documented (zsc_metric.py:74-99; SCHEMA.md). A failed request scores as a confidently wrong answer, the worst case under every term (zsc_metric.py:23-31). Label order is permuted with a fixed seed (zsc_protocol.py:85), so grading is deterministic. With 200 rows and 15 bins, ECE has a small positive finite-sample bias (uniform gets 0.025), which applies to all submissions.",
+      "evidence": [
+        "tests/task/zsc_metric.py:97 'ece = min(1.0, math.fsum(abs(hits - confidence_sum) ...) / n)'",
+        "tests/task/pipeline/sanity_results.json heldout.uniform.ece 0.0249"
+      ],
+      "affects": "none material"
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The statelessness rule ('no caching (not even label embeddings)') is stated in CONTRACT and enforced only by the reviewer. Each dataset repeats one label set 200 times, so caching would be a large speed-up that grading cannot detect mechanically. Consistent between the prompt, CONTRACT and review.py:44-50; listed because it cannot be checked automatically.",
+      "evidence": [
+        "environment/validation/CONTRACT.md:7 'no caching (not even label embeddings) or adaptation across requests'",
+        "tests/task/review.py:47-48 'caching text/label predictions or label embeddings across requests'"
+      ],
+      "affects": "Bi-encoder servers. No observed violation."
+    }
+  ]
+}

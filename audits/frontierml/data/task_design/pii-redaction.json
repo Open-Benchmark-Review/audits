@@ -1,0 +1,83 @@
+{
+  "task": "pii-redaction",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "The metric is the public paper-reproduction R-score, shipped to the agent verbatim, and the anchors are sensible. The held-out documents are the rest of a public test-only benchmark (no train split to exploit), and the noise (about 2.5 points on 161 documents) is large relative to the gaps between top models.",
+  "noise_se_points": 2.5,
+  "floor": "0 = 0.2351 raw: one span covering each whole document, measured on the 161 held-out documents (tests/task/task.yaml:37-43). Empty spans score 0.0621 raw, below the floor, so they clamp to 0. This is a sensible blind baseline. No regex or off-the-shelf-NER baseline was measured, and one would probably sit well above the floor.",
+  "ceiling": "1 = gold spans, which score exactly 1.0 (task.yaml:42-43). It is reachable in principle and not binding; best observed 79.0.",
+  "usable_range": "observed 0-79 of 0-100 (wallet means 49.7 / 52.4 / 52.6)",
+  "feasible_at_10": "yes: Fable scored 74.8 at $10, and Gemini's 79.0 top cost $10.47 of a $200 wallet. Encoder taggers (DeBERTa-v3-large / ModernBERT-large) trained on LLM-synthesised documents fit easily in the budget.",
+  "budget_scaling": "Flat. The 19-model mean is 49.7 / 52.4 / 52.6 (mean compute $4.9 / $17.6 / $34.7). Only Opus rises monotonically (73.1 / 77.3 / 77.9), within about 2 SE. Matching the annotation policy from the 39 documents matters more than compute.",
+  "selfcheck_fidelity": "Gates are the same: the same validate.run path, the same 32.2 s deadline (161 / 5) and the same per-item failure rule (verifier.py:43-93). But the batch cycles the 39 public documents (i % 39), so a text cache, which this contract does not forbid, flatters the self-check. The note warns about this (verifier.py:52-57). DeepSeek e5woud passed self-check this way and missed the deadline in grading. Held-out length is not compared with public length, so a length shift could also hide a miss (suspected). No score and no review.",
+  "judge": "No LLM judge in the metric. The reviewer (Claude Opus 5.5, global) applies 4 checks: provenance, non-specialist initialisation, no lookup, and reviewed weights (tests/task/review.py:10-67).",
+  "neutrality": "The prompt names the metric 'R-score', which points to the RedactionBench paper (arXiv 2606.18782) and its annotation guidelines. Agents that know or find it can learn the mandatory/contextual convention beyond the 39 documents. Six of 18 audited trials did. Reading the paper is allowed and was judged consistently. No vendor-specific judge or format. The ban on specialist PII models applies to initialisation only. Using one to label training data is allowed (review.py:46-49), which favours no family.",
+  "reference_solution": "The shared smoke fixture returns {\"spans\": []} (solution/server.py:75). That is 0.0621 raw, so 0 after normalisation, and it fails the review. The trials show the task is solvable.",
+  "issues": [
+    {
+      "category": "heldout",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The 39 public and 161 held-out documents together are the whole RedactionBench test parquet (public, CC-BY-4.0). The held-out set is in-distribution with the public sample, not OOD, and anyone can download it. Leakage control rests entirely on the review. Unlike ai-text-detection, RedactionBench has no train split, so recognising the benchmark buys only the paper's guidelines, not in-distribution training data.",
+      "evidence": [
+        "tests/task/review.py:3-5 'Both of this task's splits (39 public, 161 held-out documents) are drawn from the public test parquet of RedactionBench/RedactionBench ... so only the contract's rule and this review stand between a candidate and training on the held-out documents'",
+        "tests/task/NOTICE.md:7-9 CC-BY-4.0, revision d45e9cec"
+      ],
+      "affects": "All models equally, as long as the review holds. No trial downloaded it."
+    },
+    {
+      "category": "spec",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "Hidden, stricter rule: the rubric fails any download of RedactionBench, or any loader or dataset id that reads it, even with no training use. The prompt bans only training, calibrating or selecting on test splits. In ai-text-detection, the same situation (reading test rows for decontamination or inspection) is explicitly allowed. An agent that downloaded RedactionBench just to inspect or decontaminate would score 0.",
+      "evidence": [
+        "tests/task/review.py:19-23 'RedactionBench in any form beyond the 39 shipped public documents ... a download of it, a loader or dataset id that reads it ... all fail'",
+        "instruction.md:7 'Do not train, fine-tune, calibrate or select on the validation or test split'"
+      ],
+      "affects": "No observed trial (the six that found RedactionBench read only the paper and card). The risk falls on careful agents that inspect the data."
+    },
+    {
+      "category": "heldout",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "There are only 161 documents, and per-document R-score has an SD of about 0.25. That gives a raw SE of about 0.02, and about 2.5 points after the /(1 - 0.235) rescale. The $10 winner (Fable 74.8 vs Opus 73.1) and the $200 winner (Gemini 79.0 vs Opus 77.9) are within noise.",
+      "evidence": [
+        "tests/config.json:5 '\"expected_samples\": 161'",
+        "tests/task/task.yaml:40 'floor: 0.23513437569925957'"
+      ],
+      "affects": "Winner calls at $10 and $200."
+    },
+    {
+      "category": "gate",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The throughput gate is all-or-nothing: 161 documents in 32.2 s, starting right after /health. Requests are dispatched in barrier chunks of 64, so one long document stalls its chunk. The window is short enough that a few seconds of variance decide pass or zero. DeepSeek e5woud ($10) scored 0 this way after a cached self-check pass.",
+      "evidence": [
+        "tests/task/verifier.py:51 'deadline = min(config.get(\"inference_timeout_seconds\", 3600), count / required)'",
+        "tests/task/verifier.py:52 'documents[i % distinct]'",
+        "frontier_ml/runtime/resources.py:634-641 chunks of 64 and 'Batch exceeded {budget:g}s deadline; score is zero'"
+      ],
+      "affects": "Slow rule+NER pipelines, toward 0. Fast encoder taggers are unaffected."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The R-score counts false positives per predicted fragment, not per character: a fully covered internal gap costs 2, and a partial over-redaction costs 1 however long it is. Heavy over-redaction around entities is therefore cheap, so 'without touching unrelated text' is only loosely enforced. This is faithful to the paper and the code ships to the agent (environment/validation/spans.py is identical to tests/task/spans.py), so it is a design property, not a hidden rule. Zero-term documents score 1 with no predictions and 0 with any.",
+      "evidence": [
+        "tests/task/spans.py:118-131 fragment-based fp_denominator, 'double=int(... count==end-start)'",
+        "tests/task/spans.py:133 'r_score=numerator/denominator if denominator else 1.'"
+      ],
+      "affects": "All equally; it slightly favours recall-heavy decoders."
+    },
+    {
+      "category": "other",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Fine as designed: the metric is deterministic and public; malformed or failed documents score 0 individually, and more than 5% fails the run (validate.py:65-77, documented). The 39 public documents may be trained on (operator decision, review.py:31-33), and the prompt says so. The ban on specialist models is clear and consistent between the prompt and review.py:34-50.",
+      "evidence": [
+        "environment/validation/CONTRACT.md:7 'a response with an invalid span is malformed and scores zero for that document only'"
+      ],
+      "affects": "none"
+    }
+  ]
+}

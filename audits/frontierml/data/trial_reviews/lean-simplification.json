@@ -1,0 +1,366 @@
+{
+  "task": "lean-simplification",
+  "task_level": {
+    "spec_issues": [
+      "The prompt forbids training, calibrating or selecting 'on the validation or test split of any public dataset or benchmark'. It does not say whether the task's own /task/public/validation.jsonl (55 proofs) counts. The reviewer policy says it does not: 'the shipped public examples in /task/public are fine' (tasks/lean-simplification/tests/task/review.py:16-17). Agents could not see this. Some avoided validation.jsonl for tuning (Opus 10kash/1g91nm/348kgu, Gemini, Astra 4d7hxi built dev pools from Lean-Workbook/NuminaMath train splits). Others tuned on it openly (Fable vb4un4, Muse 3gdrrt, DeepSeek teia0r). No trial was penalised, which is consistent with the policy. The cautious agents may have given up some score for nothing.",
+      "The held-out statements come partly from AI-MO/minif2f_test (tasks/lean-simplification/tests/task/pipeline/build_data.py:29-34; the other sources are Lean Workbook, Goedel-Pset-v1 and FormalMATH-All). Most agents served DeepSeek-Prover-V2-7B, Goedel-Prover-SFT/V2-8B or BFS-Prover-V2-7B. These provers were developed and reported against miniF2F-test. review.py:24-25 explicitly does not count 'incidental exposure during a declared base model's upstream pretraining', so this is allowed. It does mean the score partly measures how well an off-the-shelf prover re-proves benchmark statements.",
+      "The contract's 'no stored table of proofs keyed by theorem' rule is clear, and the reviewer checked it on every trial. No trial shipped proof data."
+    ],
+    "verifier_issues": [
+      "Score = 100 x mean over 354 held-out proofs of max(0, 1 - new_tokens/original_tokens). An invalid or unchanged proof scores 0. There is no normalization block in task.yaml, so the raw metric is the score. The inputs are the shortest original organizer-generated proof per statement. Inputs a fixed one-tactic automation already solves are dropped (build_data.py:27-28, 129), so trivial closers do not dominate. Public and held-out families are disjoint (build_data.py:104-108, 172).",
+      "Every grade reports valid_fraction. It is 1.0 except DeepSeek 417mxo (0.9915), DeepSeek 4hoy6u (0.9718) and Muse 3gdrrt (0.9011). In those three trials the agent's own check disagreed with the official sandboxed checker on some proofs, which is the agent's problem. Standard errors are 0.006-0.016 (about 1.4 points for most trials).",
+      "The selfcheck never runs Lean ('No proof was checked by Lean: answers were checked only by grading's parser'). Agents get no official score before grading. This probably explains Muse 138qky: it measured about 0.115 on validation with its own checker (trajectory [268] 'MEAN 0.1152 over 55') and scored 0.0325 held-out."
+    ],
+    "noise": "Wallet ordering is sensible for Opus (33.9, 29.4, 40.5; the $50 run used Goedel-Prover-SFT instead of DeepSeek-Prover-V2-7B). It is flat or inverted for Fable (21.4, 29.8, 25.5), DeepSeek (27.0, 27.1, 14.7) and Muse (11.4, 6.7, 3.3). Near-identical approaches (search plus a pretrained prover) span 21-34 points at $10, so the method of combining Lean search with LLM proposals matters more than the wallet. Standard error is about 1.4 points. The $50 winner (Fable 29.77) is 0.35 points ahead of Opus (29.42) and 1.8 points ahead of Astra (27.98), so it is a statistical tie. The $10 (Opus 33.9 vs DeepSeek 27.0) and $200 (Opus 40.5 vs 25.5) winners are clear.",
+    "elicitation": "Compute matters little here: most of the gain comes from CPU-side Lean search, and agents spent $0-35. DeepSeek ran with almost no wallet spend ($0-1.18) and still reached 27 points at $10/$50 with pure Lean search. Muse is the outlier on the low side (3-11) at every wallet. All Gemini runs are re-runs (-r2) whose originals are unpublished. No harness-specific failure affected a score.",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "All 18 trials passed review and I found no false positive, false negative or infrastructure zero. Opus wins $10 and $200 by clear margins. Fable wins $50 by 0.35 points, which is within noise but not a scoring defect.",
+    "science_vs_gaming": "Almost all of the score is legitimate engineering: Lean-verified proof golfing (delete steps, prune hint lists, try one-token closers, delta-debug) plus samples from a pretrained prover, with each candidate checked by Lean at inference time. Nobody gamed the checker or shipped proofs. The only mild benchmark-specific element is tuning tactic portfolios on the 55 public examples, which the reviewer policy allows. The best idea is Opus 10kash's in-Lean `probe%` tactic, which tests many edits from one saved elaboration state. It is clever engineering rather than research."
+  },
+  "trials": [
+    {
+      "model": "claude-opus-5-5",
+      "trial": "10kash",
+      "wallet": 10,
+      "official_score": 33.89,
+      "official_review": "pass",
+      "approach": "Lean-verified anytime search (a custom Lean `probe%` tactic that tests closer/deletion edits at every tactic site from one elaboration, ddmin of hint lists, unused-`have` removal) plus DeepSeek-Prover-V2-7B samples served by vLLM, every candidate re-checked by a fast clone of the official checker. Heuristics were tuned on a 1,223-proof dev pool from public train corpora; validation.jsonl was used only as a smoke test.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[28] 'Now, a dev set from public *training* corpora for tuning'",
+        "[129] public validation smoke test scored 0.29 vs dev 0.51; held-out 0.339",
+        "[198] 'DeepSeek-Prover-V2-7B beats the symbolic result on 63 [of 324 dev problems]'",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-opus-5-5",
+      "trial": "348kgu",
+      "wallet": 50,
+      "official_score": 29.42,
+      "official_review": "pass",
+      "approach": "Linter-guided edit search (delete unused tactics, prune hints, replace suffixes with one tactic) plus Goedel-Prover-SFT proposals. The prover was chosen against DeepSeek-Prover V1.5/V2 on a 263-proof dev set from Lean-workbook-proofs and NuminaMath-LEAN train splits.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "provenance/logs/EXPERIMENTS.md written at [320]: 'selection on training-split dev set only'; Goedel-Prover-SFT 0.327 vs DSP-V1.5-RL 0.257 on the lw subset",
+        "miniF2F appears only in HF search listings ([34]); nothing downloaded",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-opus-5-5",
+      "trial": "1g91nm",
+      "wallet": 200,
+      "official_score": 40.46,
+      "official_review": "pass",
+      "approach": "Tactic search with short hammers (`bound` alone solved 183/700 dev problems), have/hint pruning, local re-checks and DeepSeek-Prover-V2-7B proposals in two rounds, A/B tested over 11 versions on dev sets from Lean-Workbook and NuminaMath train data. Highest score on the task (40.5).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[23] reasoning: 'pull a dev set from public training corpora, avoiding miniF2F since that's the source of these statements'",
+        "[61] 'bound alone solves 183/700 dev problems'",
+        "[247] 'v8 scores 0.588, the best result yet'",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "vb4un4",
+      "wallet": 10,
+      "official_score": 21.38,
+      "official_review": "pass",
+      "approach": "Lean REPL search (closing tactics, step deletions, hint minimization, greedy combination) plus DeepSeek-Prover-V1.5-RL proposals. Configurations were compared on full validate.py runs against validation.jsonl and on a Lean-Workbook dev set.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[95] 'Baseline score came in at 0.266' (validation run); [138] 'Run 2 scored 0.290, up from 0.266'; [141] LLM-vs-heuristics choice made from selfcheck/validation numbers. Selecting on /task/public is allowed by review.py:16-17",
+        "[91] V1.5-RL chosen after a 32-item dev test",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "5l3hxm",
+      "wallet": 50,
+      "official_score": 29.77,
+      "official_review": "pass",
+      "approach": "Deterministic deletion/closer/truncation passes with a persistent Lean worker pool, plus unmodified DeepSeek-Prover-V2-7B proposals prompted with the statement. No training; validation used for server testing.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: valid_fraction 1, shorter_fraction 0.788, SE 0.0137",
+        "Reviewer: 'During development the participant used the public validation set shipped with the task, but only to test the server' (trajectory#88)",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "626t6y",
+      "wallet": 200,
+      "official_score": 25.49,
+      "official_review": "pass",
+      "approach": "Heuristic finishers and proof-variant rewrites plus DeepSeek-Prover-V2-7B samples, Lean REPL pool, frontier_check confirmation. Scored lower than Fable's $50 run.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: 25.5, shorter_fraction 0.72",
+        "DATA_MANIFEST.md states validation used for smoke tests and validation; allowed by review.py:16-17",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "1qz35o",
+      "wallet": 10,
+      "official_score": 21.53,
+      "official_review": "pass",
+      "approach": "Fixed tactic list, regex edits of the input proof and three Goedel-Prover-V2-8B continuations per request, Lean-checked. Built in under 1 hour of agent time with 24 hand-written dev examples.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "grade: agent time 0.97 h, score 21.5, shorter_fraction 0.53",
+        "Reviewer: 'The only development data is 24 examples hard-coded in scripts/make_examples.py'",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "4d7hxi",
+      "wallet": 50,
+      "official_score": 27.98,
+      "official_review": "pass",
+      "approach": "Symbolic optimizer (tactic candidates, structural rewrites, guided pruning) in parallel with Qwen3-32B-AWQ proposals from a few-shot prompt with Lean-error repair. 256-row Lean-workbook-proofs train sample for development.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'The only selection/development corpus is declared: the Goedel-LM/Lean-workbook-proofs train split ... 256 rows'",
+        "Only 1 selfcheck used; batch 45.8 s",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "30f11k",
+      "wallet": 200,
+      "official_score": 24.32,
+      "official_review": "pass",
+      "approach": "Minimizer (online tactic search, suffix search, deletion/inlining) plus Goedel-Prover-V2-8B proposals. The checkpoint was chosen over Qwen3-30B-A3B on agent-authored examples.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Final message [191]: 'Public validation: 28.1% average token reduction'; held-out 24.3",
+        "Reviewer: chosen 'using session-authored development examples (tests/synthetic.jsonl, tests/structured.jsonl)'",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "1iui1v",
+      "wallet": 10,
+      "official_score": 23.68,
+      "official_review": "pass",
+      "approach": "LoRA fine-tune of Goedel-Prover-SFT on 220 Lean-verified simplification pairs built from DeepSeek-Prover-V1/Lean-Workbook train rows (benchmark-prefixed and validation statements removed), plus one-token finishers and tactic golfing.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'keeps only DeepSeek rows with split=='train'. It also drops benchmark-prefixed items and any statement that appears in /task/public/validation.jsonl'",
+        "LoRA trained on Spin A100 (trajectory#205, #228)",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "ha33es",
+      "wallet": 50,
+      "official_score": 22.98,
+      "official_review": "pass",
+      "approach": "DeepSeek-Prover-V2-7B LoRA-merged on 76+ simplification pairs from Lean-workbook-proofs and an allow-listed NuminaMath-LEAN train subset, sampled on GPU and checked by FastCheck workers alongside heuristic golfing.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'step 67 fetched only API metadata (commit SHAs and file lists) for minif2f, proofnet, PutnamBench and ProverBench, and step 68 deleted the resulting manifest'",
+        "NuminaMath sources math_test, amc_aime and olympiads excluded",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "61biwu",
+      "wallet": 200,
+      "official_score": 25.47,
+      "official_review": "pass",
+      "approach": "BFS-Prover-V2-7B with a LoRA SFT on 1,129 Lean-checked pairs from three pinned public train corpora (validation signatures removed), plus a Lean-guided simplifier (tactic sweeps, pruning, have-compression).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[64] reasoning: 'exclusively using the train splits of Goedel-LM, internlm, and NuminaMath-LEAN and excluding matches to validation.jsonl, MiniF2F, and ProofNet'",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "teia0r",
+      "wallet": 10,
+      "official_score": 26.98,
+      "official_review": "pass",
+      "approach": "Pure Lean-verified syntactic search (hints lifted from the original proof into one-shot nlinarith/linarith, delta-debug deletion, tactic portfolio). It probed Qwen models via OpenRouter, then shipped no model. Transforms were developed against validation.jsonl, and the docs understate this.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[34] cloned yangky11/miniF2F-lean4; [35]-[36] used only to grep for overlap with validation statements (none found); never used afterwards (reviewer agrees)",
+        "[185] 'I've already been measuring on validation and choosing transforms partly based on it. That is a gray area.' and [258] 'my actual selection used the task's validation set'. DATA.md at [263] nevertheless says validation was 'Used only to run the server end to end'. The documentation is inaccurate, but selection on /task/public is allowed (review.py:16-17), so this is not a violation",
+        "No repository or HF tasks-dataset access: the only 'frontier-ml' hits are the local /opt/frontier-ml harness install",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "417mxo",
+      "wallet": 50,
+      "official_score": 27.15,
+      "official_review": "pass",
+      "approach": "Model-free verified golfing with eight persistent Lean REPL daemons: whole-proof automation, existential witnesses, hint-subset enumeration, delta-debugging and syntax rewrites. Measured on a 56-theorem Lean-workbook-proofs train dev set. $0 wallet spend.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Final message [346]: 'Score evidence (dev set, 56 theorems, train split only)'",
+        "grade: valid_fraction 0.9915 (3 of 354 returned proofs failed the official checker)",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "4hoy6u",
+      "wallet": 200,
+      "official_score": 14.75,
+      "official_review": "pass",
+      "approach": "Deterministic portfolio in one Lean process per request (one-token tactics, lifted hint terms, argument shrinking, have inlining, delta-debugging). Ordered using the DeepSeek-Prover-V1 train dataset and OpenRouter-generated verbose proofs on Lean-Workbook statements. Lowest DeepSeek score despite the $200 wallet.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'DeepSeek-ProverBench was only listed at trajectory#22 and was never downloaded'",
+        "grade: valid_fraction 0.9718, shorter_fraction 0.47",
+        "The in-process _cache is keyed on identical (statement, proof) requests and starts empty, so it is not a lookup table",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "3gdrrt",
+      "wallet": 10,
+      "official_score": 11.4,
+      "official_review": "pass",
+      "approach": "Tactic portfolio, solver hints reused from the input, sq_nonneg hint pools and step-deletion variants, plus six Goedel-Prover-V2-8B samples. Portfolio and timeouts tuned on validation.jsonl. 10% of returned proofs failed the official checker.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'The tactic portfolio and timeouts were tuned only against the shipped public examples in /task/public/validation.jsonl, which the policy allows (trajectory#45, trajectory#123)'",
+        "grade: valid_fraction 0.9011",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "2dcyfg",
+      "wallet": 50,
+      "official_score": 6.68,
+      "official_review": "pass",
+      "approach": "Deterministic generate-and-verify pipeline (tactic portfolio, mined hints, step deletions) with the vendored Lean. An SFT Qwen2.5-Coder-7B was built in a separate tree, gave only noise-level gains and was not shipped.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Final message [341]: 'measured mean reduction around 0.08-0.10' on validation; held-out 6.7",
+        "Reviewer: the llm_tree experiment 'was never copied into /workspace/output'",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "138qky",
+      "wallet": 200,
+      "official_score": 3.25,
+      "official_review": "pass",
+      "approach": "Symbolic Lean-verified search plus a Goedel-Prover-V2-8B LoRA fine-tuned on NuminaMath-LEAN train targets produced by its own search. It measured about 0.115-0.13 on validation but scored 3.25 held-out, the lowest on the task.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[247] 'MEAN 0.1237 over 55'; [268] 'MEAN 0.1152 over 55' (own checker on validation), versus held-out 0.0325 with shorter_fraction 0.136. The selfcheck never scores proofs, so the drop was invisible to the agent. No evidence of a grading fault: valid_fraction 1 and no failed requests are reported",
+        "Reviewer checks (training data provenance, no proof lookup, actual inference path, harness credentials) all pass and match the trajectory."
+      ],
+      "confidence": "medium"
+    }
+  ]
+}

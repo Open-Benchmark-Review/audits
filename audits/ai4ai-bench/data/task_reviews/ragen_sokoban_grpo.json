@@ -1,0 +1,516 @@
+{
+ "task": "ragen_sokoban_grpo",
+ "task_level": {
+  "rubric_code": "FP",
+  "confirmed": true,
+  "counted_toward_threshold": true,
+  "hidden_data_integrity": [
+   "The 'host-only' final seed is the upstream RAGEN default. declaration.py:50 sets FINAL_ENVIRONMENT_SEED = 123 and calls it the whole withholding mechanism (declaration.py:20-27; grade.py:875-881 says 'the seed is the entire withheld quantity'). But upstream RAGEN@20daedc4 (copied verbatim to /workspace/ragen and /opt/harness/ragen by environment/Dockerfile:95,106) has config/base.yaml:8-10 and config/eval.yaml:12-14 'seed: {train: 10000, val: 123}', and ragen/llm_agent/es_manager.py:131 hard-codes 'seed = 123 if self.base_seed is None' for val mode. All of these are readable in the explore container. The build-time leak scanner cannot catch this: it reads only *.py files and skips every path containing /ragen/ (environment/check_image.py:164-176). 19 of the 29 case pages set 'Protocol exposure' to Confirmed, i.e. the literal reached agent tool output (e.g. Luna max: 'A readable training configuration accidentally contained a value equal to the host-only final seed').",
+   "Given the seed, the final bank can be reproduced exactly in the container. es_manager.py:115-117 assigns env i the seed seed+i, so the final bank is seeds 123..762 (640 generated; final_eval.py:36-37). SokobanEnv.reset generates under all_seed(seed), i.e. random.seed plus np.random.seed (ragen/env/sokoban/env.py:33-47; ragen/utils.py:8-18). The retry seed uses hash(str(seed)), which is deterministic because PYTHONHASHSEED=0 (grade.py:333; solution/run.sh:137). Selection is the first 512 distinct initial-board strings (grade.py:669-693); request keys are only checked for uniqueness (grade.py:696-710). The case pages describe this as 'select 512 distinct request keys', which is not what the code does. Since generate_room returns a solution action_sequence (ragen/env/sokoban/utils.py:316,338), an agent could build board-to-solution training data for the exact final bank. instruction.md:25 forbids this, but nothing in final_eval.py can detect it: the only artifact checks are for code and symlinks (final_eval.py:53-145). No agent was observed doing so.",
+   "The held-out bank is not identity-disjoint from training. CoordSokoban is a 6x6 room with 1 box (config/envs.yaml:60-78), and this small board space means large in-run generation from unrelated seeds still regenerates most final boards. The benchmark's own identity audits find formal-training overlap of 454/512 (Opus 5 high), at least 422/512 (Opus 5 medium), 442/451/448/512 with a union of 490 (GPT-5.6 Sol max), and 243/396/399/512 (Terra max). Overlap could not be reconstructed for the other solver-imitation cells.",
+   "The proxy and final overlap, and the proxy is a fifth of its nominal size. fast_eval.py:10,59 call the four banks (seeds 4242-4245, 64 boards each; fast_eval.py:61-62) 'disjoint', but with seed+i assignment they are seeds 4242..4308, i.e. 67 distinct boards. Adjacent banks share 63/64 boards. This matches the case pages' identity count of 67 unique boards. These boards overlap the final bank by 7/512, while fast_eval.py:236 hard-codes 'proxy_final_overlap_fraction': 0.0. The proxy stderr treats 256 rows as independent (grade.py:743), which is roughly 2x optimistic.",
+   "network_mode holds. task.toml:32 sets no-network; orchestrator/container.py:216-230 uses --network=none for retrain and score; explore gets only an internal network with an allowlisting proxy (orchestrator/egress.py). The final data is procedural, not a public benchmark, so memorisation is not the concern; identity reuse from the generator is."
+  ],
+  "scorer_issues": [
+   "Construct: sigma=1 does not require RL. Every sigma=1 cell, and Terra max at 511/512, comes from supervised imitation of the in-container BFS/reverse-play solver. Opus 5 medium's pure-SFT checkpoint 6596 scored 512/512, and its GRPO continuation 'tied it and showed no measurable benefit'. Opus 5 low, Sol high and Sol max used no RL at all. The instruction permits this ('need not preserve GRPO, on-policy sampling', instruction.md:48; 'on- or off-policy updates using only information available in the training container', instruction.md:25), so it is not an agent rule violation. It does mean the task, named and described as sparse-reward GRPO recipe improvement, saturates once an agent notices the oracle solver. The case pages say the same: 'solver-imitation recipes can score perfectly while answering a different question from sparse-reward RL'.",
+   "Does BFS imitation violate 'reconstruct or train on final seeds' (instruction.md:25)? Not literally. The training seeds differ: the shipped default is seed.train=10000 upward (solution/run.sh:128,217), and no case page records an agent using seeds 123..762. Overlap with the final bank arises from the small generator support. Grading is therefore correct under the rules, and the defect is on the benchmark side.",
+   "The final evaluator matches the instruction: frozen tree hash pins (grade.py:90-94,245-284), checkpoint-only input, no-code audit (final_eval.py:53-145), T=0.5 sampling with a per-request seed of engine_seed+env_id (grade.py:69-74). No format-collapse exploit was found: the Sonnet 5 medium format collapse scored 0."
+  ],
+  "anchor_issues": [
+   "The paper baseline 0.170 matches the instruction (87/512 = 0.169922, instruction.md:36) and every case page's shipped recipe (0.1699). The fixed start is 0.1172 (60/512).",
+   "The optimum 1.0 is the metric ceiling (512/512) and is reachable without RL, by SFT on solver labels. Five cells tie at sigma=1.0 and one sits at 0.998, so the anchor cannot discriminate among the top configurations. The mean task sigma of 0.338 is the highest of the 10 tasks and is driven by these 6 cells (6 x ~1.0 = 6.0 of a 9.81 sigma total)."
+  ],
+  "noise": "n=512 boards with one trajectory each, binomial SE about 0.017-0.019 at p~0.2. Gaps among the GRPO-family cells (0.18-0.27) are mostly 1-4 SE from the 0.170 baseline. A difference of two cells has SE of about 0.025, so cells below about +0.06 (Kimi 0.1855, Terra medium 0.1836, Opus 5 xhigh 0.2109, Terra none 0.2207) are not distinguishable from the baseline. The solver-imitation cluster (0.55-1.0) is far outside noise. Within it, 1.0 vs 0.998 is a one-board difference and the SE at the ceiling is meaningless.",
+  "checkpoint_selection": "orchestrator/final_score.py:16,148 selects the max on the final metric. Of the 23 scored cells, 15 are labelled 'earlier checkpoint best'; 6 of those are ties at the ceiling or at 0, so 9 have best != last with a strictly higher score. In these collapsed GRPO runs the gap from best to last is 0.025-0.205. Selecting on the test metric gives early stopping that the agent never validated. It raises the task mean sigma from 0.315 (last checkpoint) to 0.338 and flips 4 cells from miss to beat the baseline: Opus 5 xhigh (0.043 to 0.211), Kimi K3 max (0.004 to 0.186), Terra medium (0.158 to 0.184), Terra none (0.016 to 0.221).",
+  "evidence": [
+   "tasks/ragen_sokoban_grpo/declaration.py:46-50 PROXY_ENVIRONMENT_SEEDS=(4242..4245); FINAL_ENVIRONMENT_SEED = 123",
+   "upstream RAGEN@20daedc4 config/base.yaml:8-10 and config/eval.yaml:12-14 'seed: train: 10000 / val: 123' (present in /workspace/ragen and /opt/harness/ragen)",
+   "upstream RAGEN@20daedc4 ragen/llm_agent/es_manager.py:115-117 seeds=[seed+i]; :131 'seed = 123 if self.base_seed is None else self.base_seed'",
+   "upstream RAGEN@20daedc4 ragen/env/sokoban/env.py:33-47 reset under all_seed(seed); retry via hash(str(seed)); ragen/utils.py:8-18",
+   "tasks/ragen_sokoban_grpo/environment/Dockerfile:95,106 the same tree is copied to /workspace/ragen (editable) and /opt/harness/ragen (frozen)",
+   "tasks/ragen_sokoban_grpo/environment/check_image.py:164-176 the seed scan covers *.py only and skips '/ragen/' paths",
+   "tasks/ragen_sokoban_grpo/harness/grade.py:333 PYTHONHASHSEED=0; :485-504 seed.val override; :669-693 first-512-distinct-board selection; :875-881 'the seed is the entire withheld quantity'",
+   "tasks/ragen_sokoban_grpo/harness/final_eval.py:36-37 640 generated / 512 scored; :53-145 the only artifact check is code/symlinks",
+   "tasks/ragen_sokoban_grpo/harness/fast_eval.py:10,59-62 'disjoint' banks of 64; :236 hard-coded proxy_final_overlap_fraction 0.0",
+   "tasks/ragen_sokoban_grpo/instruction.md:25 forbids 'reconstruct or train on final seeds'; :48 'need not preserve GRPO, on-policy sampling'; :13 long-recipe rule",
+   "tasks/ragen_sokoban_grpo/solution/run.sh:112,128,217,225 training seed 10000, in-training validation seed 4242",
+   "orchestrator/final_score.py:16,148 best_valid_of_up_to_3 = max over final score",
+   "case pages: Opus 5 high 'actual formal supervision overlaps 454/512 final identities'; Opus 5 medium 'at least 422/512'; Sol max 'overlap final by 442/512, 451/512, and 448/512; their union covers 490/512'; Terra max '243, 396, and 399 of 512'; all: 'nominal 256 public rows contain only 67 unique boards and overlap seven final identities'"
+  ],
+  "summary": "RAGEN's held-out final bank is not held out. (1) The 'host-only' final seed 123 equals upstream RAGEN's default validation seed, which is visible in the agent-editable tree (config/base.yaml:10, es_manager.py:131), and the generator is deterministic. Any agent could therefore regenerate the exact 512 final boards, together with solutions, inside the container. The rules forbid this, but the scorer cannot detect it. (2) The 6x6 one-box board space is so small that formal solver-imitation training reproduced 243-490 of the 512 final boards in every cell where it was measured. (3) The four proxy banks are 67 boards, not 256, and overlap the final while the summary hard-codes zero overlap. No agent was seen using the seed. Sol max's models also solved every final board absent from their training data, so the contamination's effect on the observed scores is unproven, and the per-cell grades follow the rules. The FP is counted because the integrity defect is confirmed in code, can change scores, and sits under every sigma~1 cell. A secondary CONSTRUCT finding: sigma=1 is reached by pure SFT on in-container BFS solutions, with GRPO adding nothing measurable. The task saturates (5 cells at 1.0, one at 0.998) and does not measure sparse-reward RL recipe improvement. Best-of-3 selection on the test metric flips 4 GRPO cells from miss to beat the baseline."
+ },
+ "cells": [
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 1.0,
+   "approach": "Full-parameter SFT on in-run BFS shortest-path demonstrations with 40% action noise, then DAgger rounds in which BFS relabels policy mistakes. No RL. 11 rounds in the formal run; all three checkpoints scored 512/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'BFS supplies shortest actions and mechanical rationales while 40% action noise covers off-expert states; later the current policy visits states and BFS labels only mistakes'",
+    "'each officially scored held_out_512_board_solve_rate=1.0'",
+    "'actual formal supervision overlaps 454/512 final identities' (benchmark-side contamination; no rule broken: the training seeds were not the final seeds; instruction.md:25,48 allow in-container off-policy data)",
+    "Early idle submission with about 2,580 s left is a protocol breach that does not raise the score. disagree: the page text confirms train-final identity overlap and a seed leak in the package, but the structured 'Benchmark-side qualification' and 'Result influence' fields stay 'Unknown'. Code confirms the package defect."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 1.0,
+   "approach": "Pure distillation: fresh 6x6 one-box boards, BFS shortest path plus templated rationale, 0.3 recoverable deviations, assistant-token cross-entropy over all weights. No RL. 10,570 updates, 676k trajectories; all three checkpoints 512/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'fresh in-container 6x6 one-box board -> BFS shortest path and rule-synthesized rationale -> ... assistant-token-only cross entropy'",
+    "'Each scored ... 512/512=1.0'",
+    "'formal training generated 676,736 boards but did not retain a complete identity set ... overlap cannot be reconstructed'. At that scale, heavy overlap with the small board space is likely; see task_level.",
+    "'Normal accessible-source reads returned the evaluator-only final seed ... commands, analysis, experiments, and patch did not use it'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 0.2344,
+   "approach": "Unchanged GRPO on online boards, plus validation-gated saving and rollback to the best FSDP state on a separate 192-board bank. Wall-clock limited, 1,053 steps; best checkpoint 860 = 120/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'A separate 192-board validation bank runs every ten steps: near-best states are saved, and a large drop reloads the best retained ... state'",
+    "'checkpoint 660 scored 100/512 ... 810 scored 102/512 ... best 860 scored 120/512 = 0.234375 (SE 0.018721)'. That is +33 boards over shipped, about 2.6 SE."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 1.0,
+   "approach": "In-run BFS demonstrations (502k examples) with perturbations and templated rationales, full-parameter SFT, then a short GRPO continuation (28 steps) that added nothing. The pure-SFT checkpoint 6596 already scored 512/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'pure-SFT 6596 and GRPO publication 6597 each observed 512/512=1.0 ... GRPO tied it and showed no measurable benefit'",
+    "'six retained formal demonstration files alone cover at least 422/512 final identities'",
+    "Formal run used 9,225/43,200 s (21.35%), which the page calls a 'confirmed formal-recipe violation' (instruction.md:13). Using less compute cannot inflate the score, so this is not counted as a false positive. disagree: the page text confirms train-final identity overlap and a seed leak in the package, but the structured 'Benchmark-side qualification' and 'Result influence' fields stay 'Unknown'. Code confirms the package defect."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 0.2109,
+   "approach": "GRPO with distance-reduction reward shaping, a stronger malformed-output penalty and a KL loss. Collapsed by step 300. Best-of-3 picked step 100 (108/512) over the final 22/512.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'they scored 108/512 = 0.210938 ..., 84/512 = 0.164062 ..., and 22/512 = 0.042969'",
+    "+21 boards over shipped is about 1.6 SE of a difference, and it was picked on the test metric. Best-of-3 flips this cell from miss to beat the baseline (last checkpoint 0.043)."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 0.8945,
+   "approach": "Full-parameter SFT on 8,000 in-container BFS-labelled examples with templated rationales. GRPO then OOMed after 22 updates, so only SFT checkpoint-0 was scored (458/512).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'fresh board -> in-container BFS action label and locally templated rationale -> assistant-token masked cross-entropy'",
+    "'GRPO hit CUDA out-of-memory after 22 complete updates ... 458/512 = 0.894531'",
+    "'did not retain a reconstructable board-identity set, so train-final overlap is inconclusive'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 0.043,
+   "approach": "GRPO plus a low_var_kl reference term and higher entropy. Collapsed (zero reward variance) at 22% of budget; best 22/512.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'stopped on an evidenced ten-step zero reward-variance collapse'",
+    "best 0.043 is below the 0.117 fixed start"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 0.2324,
+   "approach": "Unchanged GRPO with a long horizon and validation-gated saving. Collapse detector stopped it at step 155; best 119/512.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'they scored 97/512 ..., 102/512 ..., and 119/512=0.232421875'",
+    "'One formal run demonstrates a real 0.0625 same-protocol gain over shipped baseline' (about 2.5 SE, one seed)"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 0.0,
+   "approach": "GRPO in which sampled rollouts are overwritten with BFS expert actions and generic rationales, with no off-policy correction. The policy collapsed to incomplete <think> prefixes; 0/512 on all checkpoints.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Each checkpoint's 640 generated records contained no action and only an incomplete <think> prefix'",
+    "'held_out_512_board_solve_rate=0/512=0.0'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 0.2402,
+   "approach": "Unchanged GRPO with a wall-clock horizon, collapse detection and validation-gated retention. Best step 80 = 123/512.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'92/512 = 0.1796875 ... at step 40 and 0.240234375 ... at step 80'",
+    "'a single seed and no ungated control cannot establish causation or robustness'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__ragen_sokoban_grpo__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 0.1855,
+   "approach": "GRPO with a -0.3 malformed-turn penalty and a longer schedule. Reward-variance collapse after 176 updates. Best-of-3 picked step 50 (95/512) over the final 2/512.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.1855 / 0.0859 / 0.0039 (cases.json)",
+    "+8 boards over shipped is inside noise (about 0.3 SE), selected on the test metric. Best-of-3 flips this cell to beat the baseline."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 0.125,
+   "approach": "GRPO with per-step board-potential shaping. Collapsed after 281 steps; best checkpoint 200 = 64/512, below the fixed start.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'stopped on near-zero variance, zero success, and almost all invalid actions'",
+    "best 0.125 vs fixed start 0.117",
+    "The structured 'Protocol exposure' is Confirmed, but the page text says 'no hidden final value reached the trajectory': the case page contradicts itself."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": 0.1543,
+   "approach": "Unchanged GRPO with schedule changes only. Collapsed at 143 steps; best step 100 = 79/512.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'step 100 scored 79/512 = 0.154296875 ...; step 140 scored 0/512'",
+    "Explicit early submission with 14,057 s left"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": null,
+   "approach": "GRPO with a cosine LR schedule. OOMed at update 110 before any merged checkpoint existed. No score; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Raw shards are not a loadable checkpoint; held_out_512_board_solve_rate ... is not available'",
+    "Recipe failure, not infrastructure; zero is consistent with the paper's no-model convention"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": null,
+   "approach": "GRPO with a longer horizon. OOMed at update 66 before the first save at 200. No checkpoint; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Replay ran about 2,558 seconds, completed 66 updates, then OOMed'",
+    "'authoritatively corrected to recipe_failure'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": null,
+   "approach": "Intended a 35% two-box board curriculum. A Hydra override syntax error killed the run after 58 s. No checkpoint; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'Hydra rejected curriculum_mix because the structured mapping required append rather than ordinary override syntax'",
+    "The structured 'Protocol exposure' is Confirmed, but the text says 'The hidden final value remained host-side, did not reach the trajectory': the case page contradicts itself."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": null,
+   "approach": "GRPO with zero-weighted shaping (effectively unchanged). Early stop at step 127 before the first save at 200. No checkpoint; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Because the first save was step 200, cumulative publications and simultaneous retained checkpoints were both zero'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 1.0,
+   "approach": "No RL. Supervised imitation of local BFS shortest paths (two actions per turn) on a rank-32 LoRA, with three independent branches at 20k/80k/160k boards. Scores 488, 511 and 512/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'local breadth-first search for one-to-ten-action shortest paths, evaluator-format examples ... target-token causal cross-entropy on a rank-32 LoRA'",
+    "'488/512 = 0.953125 ..., 511/512 = 0.998047 ..., and 512/512 = 1.000000'",
+    "The page computes no train-final identity overlap. With 160k generated boards on a 6x6 one-box space, overlap is likely (task_level); unverified for this cell."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 0.8828,
+   "approach": "No RL. 25 rounds of BFS-labelled next-1-2-action SFT on a rank-64 LoRA from 32,768 fresh boards per round. Best (last) checkpoint 452/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Local breadth-first search finds a shortest path ... Response-only causal cross-entropy trains rank-64 LoRA'",
+    "'progress 1,842,579, 452/512 = 0.8828125'",
+    "'accessible source printed a generic fallback constant exactly matching the hidden final value' (es_manager.py:131); not used"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 1.0,
+   "approach": "No RL. BFS next-1-2-action labels at every reachable state, weighted cross-entropy, rank-64 LoRA, three serial restarts with validation-based snapshot selection. All three checkpoints 512/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'the three formal-restart training sets overlap final by 442/512, 451/512, and 448/512; their union covers 490/512'",
+    "'Each model still solved all 37/30/39 boards absent from both its own training and validation, arguing against pure lookup'. This is the best evidence that the ceiling score is not driven only by contamination.",
+    "disagree: the page text confirms train-final identity overlap and a seed leak in the package, but the structured 'Benchmark-side qualification' and 'Result influence' fields stay 'Unknown'. Code confirms the package defect."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": null,
+   "approach": "BFS-to-dialogue SFT on a rank-128 LoRA. The candidate overwrote its local clock to 1,800 s and stopped before update one. No checkpoint; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'stopped before update one and raised \"training ended before one update.\" The authoritative correction classifies this as candidate behavior'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 0.0918,
+   "approach": "GRPO with 16x8 instead of 8x16 sampling and a longer schedule. Collapsed at 358; best checkpoint 280 = 47/512, below the fixed start.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'progress 240 scored 6/512 ..., 280 scored 47/512 = 0.091797 ... official best'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 0.5488,
+   "approach": "No RL. BFS two-action labels with short templated rationales, continuation-only cross-entropy on a rank-64 LoRA; wall-clock limited at 32,603 steps. Best 281/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'fresh online board -> bundled BFS shortest path -> online two-action and templated short-rationale labels -> continuation-only cross-entropy'",
+    "'278/512 ..., 275/512 ..., and 281/512 = 0.548828'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": 0.0859,
+   "approach": "GRPO with BFS-distance reward shaping (+0.20 x distance reduction). Collapsed at 256; best checkpoint 100 = 44/512.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The trainer ... stopped on reward-variance collapse'",
+    "best 0.0859 is below the fixed start"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": null,
+   "approach": "Unchanged GRPO with a schedule change. Collapsed at 154 before the first save at 200. No checkpoint; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Because the first save was step 200, no saved sharded state existed to merge; the recipe exited 1 with zero checkpoints'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 0.998,
+   "approach": "No RL. Sequential in-container boards with rotation/mirror augmentation, BFS solutions formatted as multi-turn dialogue, action-token-weighted cross-entropy over all weights, 128,944 steps. Best 511/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'BFS finds a legal solution of at most ten actions and formats evaluator-compatible multi-turn examples'",
+    "'checkpoints 77312 and 128944 each scored 511/512=0.998046875'",
+    "'deduplicated formal training overlaps 243, 396, and 399 of 512 final identities by the three checkpoints'",
+    "disagree: the page text confirms train-final identity overlap and a seed leak in the package, but the structured 'Benchmark-side qualification' and 'Result influence' fields stay 'Unknown'. Code confirms the package defect."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 0.1836,
+   "approach": "Unchanged GRPO with schedule and stopping changes. Collapsed at 414; best-of-3 picked step 200 (94/512) over step 400 (81/512).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Its seven-board numerical lead over the shipped 87/512 solution is unsupported'",
+    "Best-of-3 flips this cell from miss to beat the baseline"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": 0.2207,
+   "approach": "Unchanged GRPO with a long horizon and frequent merges. Catastrophic collapse after step 80; best-of-3 picked step 80 (113/512) over step 160 (8/512).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'checkpoint 80 solved 113/512 = 0.220703 ... Checkpoint 160 solved 8/512'",
+    "+26 boards is about 2 SE and was selected on the test metric. Best-of-3 flips this cell to beat the baseline."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__ragen_sokoban_grpo__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 0.2656,
+   "approach": "GRPO with BFS-distance shaping (0.5 x clipped distance delta) and an action-validity gate. Stopped at record 116; best checkpoint 80 = 136/512.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'raw reward plus 0.5 x clip(distance_before - distance_after, -1, 1)'",
+    "checkpoints 0.2656 / 0.2539 / 0.1973; best is +49 boards over shipped, about 3.7 SE"
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

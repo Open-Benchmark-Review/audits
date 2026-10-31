@@ -1,0 +1,367 @@
+{
+  "task": "lean-validity",
+  "task_level": {
+    "spec_issues": [
+      "The data rules are unusually detailed and consistent across prompt, CONTRACT.md and reviewer policy. The shipped 526 attempts may be used for anything, and so may everything derived from them (tasks/lean-validity/tests/task/review.py:7-10, 45-53). Every other miniF2F copy, including third-party proof attempts on miniF2F statements, is forbidden (review.py:56-62). Every trial that touched miniF2F used it only for decontamination, which the rule allows (review.py:63-65).",
+      "'The answer has to come from the model, not hand-written rules' is enforced as 'hand-written rules or regexes must not be the source of the prediction' (review.py:19-23). The rubric does not cover hand-written rule detectors fed as features into a learned head. Gemini cnnjfd shipped exactly that. One of its features is a blacklist of specific Mathlib identifiers mined from errors (`sq_pos`, `Int.cast_succ`, `Nat.factorial_mul` ...), alongside detectors it describes as having 'zero false positives on validation.jsonl' (trajectory [205]). The reviewer accepted it ('The 27 regex structural features are only inputs to the trainable heads'). Under a strict reading this is a partial hand-written validity checker. It did not affect any winner (23.4 at $10).",
+      "No trial accessed the inductionlabs/frontier-ml-tasks dataset, the benchmark repo or frontierml.org. The only 'frontier-ml' hits in Gemini 15ey73 and DeepSeek o0vki2 are the local /opt/frontier-ml harness directory."
+    ],
+    "verifier_issues": [
+      "Reward = 2 x macro_F1 - 1, clamped to [0, 1] (task.yaml score_normalization: floor 0.5, ceiling 1.0). A classifier below chance therefore scores 0: Muse 57iczy had macro F1 0.397, below the 0.5 coin-flip floor. The held-out set is 3,540 attempts on 295 theorems.",
+      "The held-out statements are one-edit variants (a changed numeric literal and/or renamed variables) of statements drawn from the same public pools that agents may train on: Lean Workbook, Goedel-Pset and FormalMATH (tasks/lean-validity/tests/task/pipeline/statements.py:1-13). Verbatim copies were pruned in a late fix ('Before 2026-09-26 unmutated candidates were kept, which put 26% of the shipped held-out statements verbatim in public pools', statements.py:10-12). Training on these pools is therefore close to in-distribution by design. This rewards large self-labeled corpora, which is what the top runs built.",
+      "Local estimates overstate held-out F1 a great deal when agents validate on random splits of validation-derived mutants. Muse 57iczy reported 'Random-split eval macro F1 reached 0.9075' (final message [93]) and scored 0.397. Gemini cnnjfd's threshold curve showed 0.81 (trajectory [349]) and it scored 0.617. Theorem-grouped CV, as used by the Opus and Astra runs, tracked the held-out score far better."
+    ],
+    "noise": "Opus orders cleanly (37.6, 45.3, 57.5), and so do Fable (28.6, 40.7, 43.2) and Gemini (23.4, 28.3, 32.5). Astra (37.5, 29.8, 35.8), DeepSeek (7.5, 29.1, 22.1) and Muse (0, 7.0, 0.1) do not. No standard error is published. With 3,540 attempts clustered in 295 theorems, a 1-2 point (0.005-0.01 macro F1) swing between near-identical models is plausible. The $10 winner is a dead heat: Opus 1qvy9h 37.55 vs Astra 2e28vk 37.51, 0.04 points apart. Opus wins $50 (45.3 vs Fable 40.7) and $200 (57.5 vs 43.2) clearly.",
+    "elicitation": "The best runs spent heavily on CPU labeling farms and H100 fine-tuning (Opus $200: $168.5 wallet; Astra $200: $169). Most of the gain came from building tens to hundreds of thousands of attempts on public statement pools, labeled with Lean. Runs that used only the 526 shipped attempts plus mutants (DeepSeek 5xiz84, Muse 57iczy) or a zero-shot prompt (DeepSeek o0vki2) scored much lower. All Gemini runs are re-runs (-r2).",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "All 18 passed review. I found no false positive, false negative or infrastructure zero. The one grey-area trial (Gemini cnnjfd, regex features into a learned head) wins nothing. The $10 Opus/Astra tie (0.04 points) is noise, not a scoring defect.",
+    "science_vs_gaming": "This is mostly real ML engineering: generate proof attempts with open provers on public statement pools, mutate them, label everything with Lean, fine-tune a prover LM (usually Goedel-Prover-V2-8B) as a sequence classifier, and calibrate the threshold on the shipped file. The benchmark-specific edge is that the held-out statements are near-variants of public pool statements and the shipped file is drawn from the same pipeline, both of which the rules allow. The only rule-adjacent behaviour is Gemini cnnjfd's hand-written error detectors."
+  },
+  "trials": [
+    {
+      "model": "claude-opus-5-5",
+      "trial": "1qvy9h",
+      "wallet": 10,
+      "official_score": 37.55,
+      "official_review": "pass",
+      "approach": "Goedel-Prover-V2-8B with LoRA and a 1-logit score head, trained on self-labeled attempts: Cartinoe5930 DS-Prover-V2 generations on Goedel-Pset/Lean Workbook, Lean-workbook-proofs, STP shard, DS-Prover-V1, own DSP-V1.5-RL generations and mutants, plus half of validation. The other half calibrated the threshold. miniF2F used only for decontamination keys.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[18] peeked at LukeBailey181/minif2f_proofnet_... schema only; [25] download restricted to lean_workbook patterns; [32] minif2f.jsonl fetched 'only to decontaminate'",
+        "[33] Cartinoe5930 dataset sources: Goedel-Pset 52,957, lean_workbook_plus 5,984, lean_workbook 1,059 (no miniF2F)",
+        "Reviewer notes one undeclared download (Slim205/math_res_DeepSeek-Prover-V1.5-SFT) that 'never entered training'",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory.",
+        "Wins $10 by 0.04 points over Astra 2e28vk, a tie under noise"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-opus-5-5",
+      "trial": "j1o92c",
+      "wallet": 50,
+      "official_score": 45.31,
+      "official_review": "pass",
+      "approach": "Goedel-Prover-V2-8B sequence classifier fine-tuned on attempts generated by four public provers on Lean Workbook, Goedel-Pset and STP statements, plus mutations, all Lean-labeled. TF-IDF decontamination against miniF2F test/valid and validation statements.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'data_scripts/build_pool.py and its log use miniF2F test/valid and the validation statements only as a decontamination reference (TF-IDF threshold 0.6)'",
+        "Kimina models appear only as candidate base models; 'yidannwang/kimina-results' appears once in a listing",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-opus-5-5",
+      "trial": "1qtduw",
+      "wallet": 200,
+      "official_score": 57.51,
+      "official_review": "pass",
+      "approach": "A two-member ensemble of Goedel-Prover-V2-8B classifiers (LoRA plus score heads) trained on 170,600 self-labeled examples from Lean Workbook and Goedel-Pset, Cartinoe DS-Prover-V2 generations and own prover generations with mutants. Validation used for selection and calibration. Best score on the task (57.5).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'The trajectory shows train_v3 was built only from the declared sources (170600 examples)'; 'miniF2F was used only for decontamination filtering in decontam.py and build_statements.py'",
+        "Wallet spend $168.53 of $200",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "55iv8r",
+      "wallet": 10,
+      "official_score": 28.56,
+      "official_review": "pass",
+      "approach": "Goedel-Prover-V2-8B with LoRA trained on Yes/No logits from a fixed prompt. Data: Lean-workbook-proofs, NuminaMath-LEAN (amc_aime and math_test excluded), Lean-Workbook attempts labeled by its own compiles, and half of validation. Informal miniF2F used for decontamination.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'The miniF2F informal statements were cloned and used only to build an exclusion list for decontamination (trajectory#14, #15)'",
+        "Kimina-Prover-Promptset appears only in a file listing ([5])",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "2fl9md",
+      "wallet": 50,
+      "official_score": 40.67,
+      "official_review": "pass",
+      "approach": "DeepSeek-Prover-V1.5-RL turned into a 2-label classifier with LoRA. Trained on attempts from public provers on Lean-Workbook, Goedel-Pset-v1, Lean-workbook-proofs and DS-Prover-V1 statements, labeled by a local Lean compile farm, plus perturbation edits.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'No miniF2F source or miniF2F statement rows were found'",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5-1",
+      "trial": "69qmg1",
+      "wallet": 200,
+      "official_score": 43.16,
+      "official_review": "pass",
+      "approach": "Goedel-Prover-V2-8B sequence classifier trained on self-generated and perturbed attempts on Lean-Workbook and Goedel-Pset statements, compiled for labels. Validation used for checkpoint selection and the 0.52 threshold.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'miniF2F was downloaded from the DeepSeek-Prover-V1.5 GitHub repo and is used only as the banned decontamination set in training/select_statements.py'",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "2e28vk",
+      "wallet": 10,
+      "official_score": 37.51,
+      "official_review": "pass",
+      "approach": "A neural ensemble of two frozen-plus-LoRA encoders, Goedel-Prover-V2-8B and an NF4-quantized Goedel-Prover-V2-32B. Linear heads over last-token and mean-pooled states. Trained on validation and compiler-labeled derivatives, Lean-workbook-proofs, synthetic arithmetic templates and Goedel-Prover-SFT generations on supplied statements.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'evidence/make_candidates.py uses the miniF2F-lean4 statements only to exclude overlapping rows: it saves only hashes ... removes 18 near-duplicate workbook rows'",
+        "[18] make_candidates.py docstring: 'miniF2F Test/Valid is used solely to exclude statements, never as examples'",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory.",
+        "0.04 points behind the $10 winner"
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "2ak1m8",
+      "wallet": 50,
+      "official_score": 29.79,
+      "official_review": "pass",
+      "approach": "Goedel-Prover-V2-32B with LoRA and a 2-class head, trained in stages (foundation, then final) on validation rows, NuminaMath-LEAN math_train and its own Lean-labeled generations.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'miniF2F (DeepSeek-Prover-V1.5 minif2f.jsonl) is read only in training/prepare_data.py, to build n-gram exclusion references'",
+        "Kimina-Prover-Preview-Distill-7B was tried as a base and not shipped",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "31h4tc",
+      "wallet": 200,
+      "official_score": 35.76,
+      "official_review": "pass",
+      "approach": "Goedel-Prover-V2-8B classifier trained through an auxiliary-then-final chain on Lean-workbook-proofs and Goedel-Pset train splits, validation-derived statements and deepseek-v3.2 attempts generated via Spin OpenRouter and Lean-labeled. miniF2F cloned at a pinned commit as an exclusion filter.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'miniF2F Test/Valid is cloned at a pinned commit (training/download_exclusions.sh) and used only as an exclusion filter'",
+        "Wallet spend $169.24; scored below its $10 run (35.8 vs 37.5)",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "cnnjfd",
+      "wallet": 10,
+      "official_score": 23.44,
+      "official_review": "pass",
+      "approach": "Kimina-Prover-Distill-1.7B with LoRA. Six learned heads read its hidden states, LM-surprise statistics and 27-28 hand-written regex 'structural features'. Those features include a blacklist of non-existent Mathlib lemma names and detectors such as ring_on_inv and linarith_on_mod, picked for having zero false positives on validation. Threshold tuned by 5-fold CV on validation.",
+      "classification": "grey_area",
+      "novelty": "none",
+      "grader_agreement": "unclear",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "[198] 'defining 28 continuous structural features within extract_structural_features(lean_text)'",
+        "[205] 'several features, specifically unterm, no_tactics, imbalance, trailing_inc, empty_by, orphan_semi, nonfunc_called, iff_pos_called, bad_at, bad_bracket, strict_have, simp_mismatch, rw_many, ring_on_inv, and linarith_on_mod, show zero false positives on validation.jsonl'",
+        "[304] writes /workspace/output/src/model.py, 'Multi-Granularity Causal-LM + Hidden-State + 27-Feature Structural Architecture', containing KNOWN_BAD_IDENTS = (r\"\\bsq_pos\\b(?!_)\", r\"\\bInt\\.cast_succ\\b\", ...)",
+        "Reviewer (learned forward pass): 'The 27 regex structural features are only inputs to the trainable heads (stats_direct is a learned parameter). They do not decide the verdict.' The rule (review.py:23) only forbids rules being 'the source of the prediction', so the pass is defensible but borderline",
+        "Local CV 0.81 macro F1 at [349] vs held-out 0.617: the features and threshold overfit the shipped file",
+        "No effect on any winner"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "15ey73",
+      "wallet": 50,
+      "official_score": 28.28,
+      "official_review": "pass",
+      "approach": "DeepSeek-Prover-V2-7B with LoRA adapters and validity heads, an ensemble of per-fold CV winners. Trained on REPL-labeled mutations of validation and of Lean-workbook-proofs / SFT_dataset_v2 / RL_dataset_V2 rows filtered to lean_workbook_* and OMR_problem_* names.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'The miniF2F decontamination claimed in the docs is not actually implemented in code', but sources are name-filtered to Lean Workbook and OMR rows. review.py:66-69 makes missing filters a lead, not a violation",
+        "'frontier-ml' hits are only the local /opt/frontier-ml directory listing",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "3ugeg4",
+      "wallet": 200,
+      "official_score": 32.53,
+      "official_review": "pass",
+      "approach": "Three LoRA-merged prover LMs (Goedel-Prover-V2-8B, DeepSeek-Prover-V2-7B, Goedel-Prover-SFT). Token log-prob statistics and hidden states from 4 layers feed a trained ridge ensemble head. Data: lean_workbook_* rows from Goedel corpora plus validation. Used only 1 selfcheck.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'create_matched_corpus.py keeps only lean_workbook_* ids. It uses miniF2F test/valid only as a decontamination blacklist (trajectory#123)'",
+        "AI-MO/minif2f_test and Kimina-Prover-Promptset appear only in a listing ([43])",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "o0vki2",
+      "wallet": 10,
+      "official_score": 7.49,
+      "official_review": "pass",
+      "approach": "Untuned DeepSeek-Prover-V1.5-RL used zero-shot: logit('yes') - logit('no') under three prompts, z-scored, averaged and thresholded. Prompts and threshold were chosen on validation. An abandoned LoRA on validation mutants was not shipped.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'The shipped model is the untuned base ... used for prompt choice, model selection, z-score statistics and the threshold'",
+        "trajectory#228 listed the yangky11/miniF2F-lean4 file tree only",
+        "macro F1 0.537",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "5xiz84",
+      "wallet": 50,
+      "official_score": 29.12,
+      "official_review": "pass",
+      "approach": "Goedel-Prover-V2-8B with LoRA and a classification head, trained only on the 526 shipped attempts plus 2,000 Lean-labeled mutants of them (threshold 0.30).",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'train_FINAL.log records rows 2526 real 526'; 'The only miniF2F fetch in the trajectory (Train.lean) returned 404'",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "deepseek-v4-1-flash",
+      "trial": "p5mjaj",
+      "wallet": 200,
+      "official_score": 22.1,
+      "official_review": "pass",
+      "approach": "Qwen3-8B with a LoRA Yes/No head, trained on validation, its mutants and LLM-generated statement variants, plus Lean-workbook-proofs train. Scored lower than DeepSeek's $50 run.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: 'A minif2f Hugging Face dataset search (trajectory#25) was never followed by a download or any use'; 'The data manifest mislabels the seed files as Lean-workbook; that is a labelling slip'",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "57iczy",
+      "wallet": 10,
+      "official_score": 0.0,
+      "official_review": "pass",
+      "approach": "ModernBERT-base classifier trained on the shipped attempts plus 3,638 Lean-labeled mutants, evaluated on a random split that leaks theorems. Held-out macro F1 0.397, below the 0.5 floor, so the score is 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Final message [93]: 'Random-split eval macro F1 reached 0.9075'; held-out 0.3969",
+        "An ordinary overfitting failure, not infrastructure",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "1xapc5",
+      "wallet": 50,
+      "official_score": 7.05,
+      "official_review": "pass",
+      "approach": "Ensemble of three Qwen2.5-Coder-0.5B classifiers trained on Lean-Workbook attempts and variants of the shipped attempts, Lean-labeled. Threshold selected on the provided file plus an eval45 split. Macro F1 0.535.",
+      "classification": "engineering",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Reviewer: miniF2F 'cloned only to filter out overlapping statements in gen_attempts.py (trajectory#27)'",
+        "Final message reports local macro F1 0.908 vs held-out 0.535",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "muse-wonder",
+      "trial": "4mflad",
+      "wallet": 200,
+      "official_score": 0.13,
+      "official_review": "pass",
+      "approach": "Qwen2.5-Coder-1.5B classifier trained on Lean-workbook-proofs gold proofs, mutations, canned tactics, LLM attempts (DeepSeek V3.2, Qwen3 via Spin) and the shipped rows. Macro F1 0.5007, which is chance level.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "reviewer_assessment": "sound",
+      "infra_issue": "none",
+      "evidence": [
+        "Final message [209]: 'macro F1 ~ 0.58 on provided-style attempts'; held-out 0.5007 gives a score of 0.13",
+        "Reviewer: miniF2F 'downloaded only to build a digit-normalized exclusion set'",
+        "All 7 reviewer checks pass (learned forward pass, no Lean, stateless, reviewed weights, provenance, non-specialist base, credentials), consistent with the trajectory."
+      ],
+      "confidence": "high"
+    }
+  ]
+}

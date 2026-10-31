@@ -1,0 +1,491 @@
+{
+ "task": "dpo_preference_alignment",
+ "task_level": {
+  "rubric_code": "MINOR",
+  "confirmed": true,
+  "counted_toward_threshold": false,
+  "hidden_data_integrity": [
+   "Declared overlap: the final is IFEval rows ordered[128:541] (413 rows) by sha256(key). The proxy is ordered[128:256], a 128-row prefix of the final (grade.py:23-26,76-79,193-211), mounted in explore (declaration.py:87-89). So 31.0% of the scored set is visible during exploration. This is stated to agents (instruction.md:81). final_eval.py:138-173 reports score(P), score(F\\P) and the gap as diagnostics only (final_eval.py:17-19). The 128 retired rows ordered[:128] are scored by neither tier.",
+   "The 285 held-out rows are mounted only in the score phase (declaration.py:10-14,176-186; assets.lock.yaml:108-137). Retrain mounts no IFEval at all (declaration.py:102-115). The split rule is readable in grade.py, but the held-out text is not. Case pages (e.g. Sonnet low, Luna medium, Sol max, Terra xhigh) report literal searches for the 285 held-out prompts/keys in trajectories and patches with zero matches.",
+   "The final data is the public google/IFEval@966cd895 (task.toml:47). Agent LLMs can recall its 25 instruction families, and the lighteval IFEval checkers ship in the image for fast_eval (grade.py:258-319). network_mode = no-network (task.toml:32) blocks download. The two top cells (Opus high/medium) built synthetic constraint-pair data for those families from UltraFeedback; this is allowed by instruction.md:83 but specialises to the benchmark. Opus high's held-out complement score 173/285 = 0.607 shows the gain is not proxy memorisation.",
+   "Training on the 128 visible proxy prompts is not explicitly forbidden (instruction.md:83 bans only held-out prompts). The proxy is not mounted in retrain, so it would have to ride in the patch. inspect_patch (orchestrator/runner.py:185-237) screens for data files but not Python literals. No case page reports this happening."
+  ],
+  "scorer_issues": [
+   "The scorer matches the instruction: prompt-level strict accuracy on 413 rows, greedy, chat template, max_new_tokens 1280 (grade.py:93-99,336-388; generate.py:46,56; final_eval.py:245-289). There are no gates to check.",
+   "MINOR: lighteval IFEval is patched (frozen regex sentence/word tokenizers replace nltk; non-alphabetic letter_frequency rows accepted; grade.py:102-128,258-319). Numbers are therefore not exactly official-IFEval comparable but are consistent within the benchmark.",
+   "Format/length gaming: no universal hack, because IFEval constraints conflict across rows (lowercase vs capital, no-comma vs lists). Length_clipped is reported (grade.py:386-387). No case shows format collapse. The realistic lever is teaching the constraint families (Opus high/medium), which is a construct caveat, not a scorer bug.",
+   "Reported-result inconsistency (one cell): codex Sol xhigh's credited best 0.4818 comes from an orphan summary that the page itself says is 'official result not available'."
+  ],
+  "anchor_issues": [
+   "The paper baseline 0.424 (scripts/score.py:21) matches neither of the case pages' references: fixed start 0.3971 (164/413) and shipped recipe 0.5085 (210/413, instruction.md:93-95). However, four formal replays of the unchanged current recipe in the case pages score 0.39-0.44: Sol none 165/413, and Terra xhigh branches at 161, 167 and 181/413. Their mean, 0.408, is close to the paper's 0.424. So the paper anchor is plausible, and the instruction's 210/413 shipped reference, which agents were shown, is not reproduced. A likely cause is stale configuration: declaration.py:19,84 say the shipped default reads 8,192 rows, while solution/run.sh:33 uses 61,135. Had sigma been anchored on 0.5085, task mean sigma would fall from 0.187 to 0.116 and cells above 0.1 from 22 to 7.",
+   "Uninformative 0 and optimum 1 are sensible for strict accuracy. Sigma=1 needs 413/413, which is not reachable without solving the task."
+  ],
+  "noise": "n=413, binomial SE about 0.024, so two cells' unpaired difference has SE about 0.034. Seed variance is visible in the pages. Same-seed replicates of the shipped recipe differ by 6 items (Terra xhigh branches 10/11: 161 vs 167), and a seed change adds up to 20 items (181). The shipped-recipe reference differs from replays by about 42 items. Only Opus medium/high (0.622/0.615) separate clearly from the 0.40-0.56 pack. Orderings among the 0.43-0.50 cells (about 15 cells) are within noise, and so is beat/miss of the 0.424 baseline for cells between 0.40 and 0.47.",
+  "checkpoint_selection": "In 16 of 29 cells the reported checkpoint is not the last one. Task mean sigma is 0.1868 with best-of-3 vs 0.1734 with the last checkpoint; the mean raw gain is about 0.014 (about 6 items of 413), selected on the scored set. One cell flips across sigma=0.1 (Opus low 0.4673 vs 0.4092). Terra xhigh turns best-of-3 into a seed lottery over three independent shipped-recipe replicates.",
+  "evidence": [
+   "tasks/dpo_preference_alignment/instruction.md:81 'The 128-row public proxy is a visible subset of the 413-row final'",
+   "tasks/dpo_preference_alignment/harness/grade.py:23-26,193-211 split: retired [:128], final [128:], proxy [128:256], held-out [256:]",
+   "tasks/dpo_preference_alignment/declaration.py:87-89 explore mounts ifeval_proxy only; :102-115 retrain mounts no IFEval; :184 score mounts all 541",
+   "tasks/dpo_preference_alignment/harness/final_eval.py:10-19,138-173 score(F), score(P), score(F\\P) diagnostic only",
+   "tasks/dpo_preference_alignment/task.toml:32 network_mode no-network; :47 ifeval_final = google/IFEval, score only",
+   "tasks/dpo_preference_alignment/harness/grade.py:258-319 patched lighteval IFEval scorer",
+   "tasks/dpo_preference_alignment/instruction.md:93-95 shipped 210/413 = 0.508475",
+   "tasks/dpo_preference_alignment/solution/run.sh:33,49 TRAIN_SAMPLES 61135, MAX_STEPS 772",
+   "tasks/dpo_preference_alignment/declaration.py:19,84 stale '8192 rows the shipped default reads'",
+   "orchestrator/runner.py:185-237 inspect_patch screens data/weights files only",
+   "audits/ai4ai-bench/scripts/score.py:21 anchors (0.424, 0, 1)",
+   "case pages codex__dpo_preference_alignment__gpt-5.6-sol__none (165/413) and __gpt-5.6-terra__xhigh (161/167/181) replay the shipped recipe"
+  ],
+  "summary": "MINOR, confirmed, not counted. The held-out 285 IFEval rows are not exposed (score-only mount; no matches in trajectories per case pages). The 31% proxy overlap is declared and diagnosed by score(F\\P). The scorer matches the instruction. Caveats: (1) the instruction's shipped reference 210/413, repeated on every case page, is not reproduced by four formal replays of the unchanged recipe (161-181/413), likely due to stale 8,192-row config; the paper anchor 0.424 is actually consistent with the replays. (2) The two top cells win by synthesising IFEval-family constraint pairs, which is legitimate under the rules but teaches to the test; it does generalise to the held-out complement (0.607). (3) Most inter-configuration gaps are inside binomial plus seed noise. (4) One cell exploits best-of-3 with seed replicates (Terra xhigh, FP) and one credits an orphan summary (Sol xhigh, unclear)."
+ },
+ "cells": [
+  {
+   "case": "claude__dpo_preference_alignment__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 0.615,
+   "approach": "Margin-filtered UltraFeedback (53,748 pairs) plus 28,941 synthetic compliant/noncompliant pairs over 24 machine-checkable formatting-constraint families derived from UltraFeedback prompts/responses with agent-written checkers; DPO (beta 0.01) + chosen NLL, length 1,536, wall-clock schedule.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'generated 24 families of locally checked compliant/noncompliant formatting pairs, made them 35% of the mixture'",
+    "case page: 'the agent inspected allowed UltraFeedback scores, lengths, and visible constraint categories' (the 128 proxy rows are 31% of the final)",
+    "case page: best held-out complement 173/285 = 0.607: the gain generalises within IFEval",
+    "grey_area = training data built for IFEval's constraint families (Tulu-3-style 'IFEval-like' data); not forbidden by instruction.md:83"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 0.4673,
+   "approach": "Unchanged DPO and data; 772 steps extended to 8,570 with 11 hard-restart cosine cycles and four publications. Best is mid checkpoint 4710; the last one regressed.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.4189 / 0.4673 / 0.4092 (last)",
+    "beat/miss-baseline flips: sigma 0.168 best-of-3 vs 0.097 last"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 0.477,
+   "approach": "Filters empty/low-gap pairs (53,674 kept), length 1,536, repeated warmup-decay cycles; DPO unchanged.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'These are data, hyperparameter, schedule, and checkpoint-engineering changes; the training signal and update rule are unchanged'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 0.6223,
+   "approach": "40,000 ordinary pairs plus 115,819 synthetic satisfying/violating pairs for 20 constraint families built from UltraFeedback prompts/answers; DPO + 0.5 chosen SFT on a frozen BF16 backbone, rank-128 LoRA.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'transforms allowed UltraFeedback prompts/chosen answers into satisfying/violating pairs for 20 base constraint families'",
+    "case page: 'accessible grade.py disclosed a deterministic proxy/held-out boundary rule that the agent read' (rule only; held-out text not mounted, declaration.py:87-89)",
+    "best 0.6223 (257/413), top DPO cell"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 0.4213,
+   "approach": "Unchanged DPO with a three-cycle wall-clock schedule. Best is the earliest checkpoint, about 1 SE above the fixed start.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.4213 (earliest) / 0.4068 / 0.3826; fixed start 0.3971; SE 0.024"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 0.54,
+   "approach": "DPO plus 0.5-weight chosen-response SFT loss; schedule and checkpoint engineering.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'the objective and training signal changed, along with schedule and checkpoint engineering'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 0.4044,
+   "approach": "Schedule/checkpoint changes only; DPO unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "0.4044 vs fixed start 0.3971 (within 1 SE)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 0.5424,
+   "approach": "DPO + 0.1 chosen NLL, 9,000-step wall-clock schedule.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'optimizes DPO plus token negative log likelihood on the chosen response at weights 1.0/0.1'",
+    "conduct field 'Suspected' concerns an exploration GPU lock-root override, not scoring"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 0.3995,
+   "approach": "Unchanged DPO run longer (7,642 steps) with wall-clock stop.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "0.3995 vs fixed start 0.3971"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 0.5061,
+   "approach": "Drops tie pairs and adds 0.2-weight chosen likelihood to DPO.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'The candidate drops ties and adds 0.2-weight chosen likelihood'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__dpo_preference_alignment__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 0.5424,
+   "approach": "beta=0.1 DPO + 0.2 chosen cross-entropy, frozen bf16 backbone, fused AdamW, run to the formal horizon.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'It sums beta=0.1 DPO with 0.2 times chosen-token cross-entropy'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 0.4019,
+   "approach": "Margin >= 0.5 filter, 50k-pair cap, 10,000 steps. Best is the earliest checkpoint, near the start.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.4019 / 0.3584 / 0.3511"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": 0.4722,
+   "approach": "beta 0.05, longer run, checkpoint timing; otherwise unchanged DPO.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'The candidate merely rescales that loss with beta=0.05, runs longer, and changes checkpoint timing'"
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 0.5327,
+   "approach": "DPO + 0.1 chosen NLL with a long schedule.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'adds 0.1 times chosen-token negative log-likelihood to DPO'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 0.4915,
+   "approach": "Unchanged DPO; scheduling/stopping/checkpoint changes. Best is the earliest checkpoint; later ones regressed.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.4915 / 0.4189 / 0.4358"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": 0.4068,
+   "approach": "Length 1,536 and an inflated step horizon; DPO unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "0.4068 vs fixed start 0.3971"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 0.5642,
+   "approach": "DPO + 0.2 chosen cross-entropy.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'chosen completion tokens additionally supply cross-entropy targets, and the summed loss uses weights 1.0 and 0.2'",
+    "page field says exposure Confirmed while its text says none found (internal inconsistency, no score effect)"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 0.4576,
+   "approach": "Token-weighted DPO (unmatched long-tail tokens down-weighted to alpha=0.5, a length-bias correction), LR 5e-7, 10,000 steps.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'changes the objective by downweighting only unmatched long-tail tokens to alpha=0.5'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 0.431,
+   "approach": "Schedule/hyperparameter changes to DPO; small gain over the start.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "0.431 vs start 0.3971 (+1.4 SE)"
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 0.4358,
+   "approach": "Score-gap >= 0.5 filter, LR 4e-7, four epochs with wall-clock stop.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'this is data, hyperparameter, schedule, and checkpoint engineering—not a new update rule'"
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 0.4939,
+   "approach": "Zero-weights unequal-length tail tokens before the DPO log-ratio (length-bias correction); three sequential members ending in a long beta-0.10 run.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'unequal-length tail tokens receive zero weight before the DPO log-ratio difference is formed'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 0.3995,
+   "approach": "Effectively the shipped recipe (filter threshold 0, 772 steps, beta 0.01, all rows) with an extra publication at step 386. Scored 165/413, versus the 210/413 that instruction.md reports for the same recipe.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'Formal replay started from the fixed policy with all data, threshold 0, baseline beta=0.01, and baseline 772 steps'",
+    "case page: 'only one item above the fixed start's 164/413 and 45 below the shipped solution's 210/413'",
+    "benchmark_audit_agreement=disagree: page keeps 210/413 as the shipped reference although its own replay of that recipe scored 165/413"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 0.4818,
+   "approach": "Zero-margin filter, first 772 steps as baseline, then rewarm and an 11,000-step cosine. The credited best (step 10,247, 199/413) comes from an 'orphan summary' with no completion receipt.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Step 10,247: official result not available; its same-protocol n=413 orphan summary says 199/413'",
+    "yet the reduction table credits artifact-10247 0.4818 as Best; without it best = 0.46 (sigma 0.156 vs 0.190)"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": 0.4939,
+   "approach": "Unchanged DPO; loss scale, warmup, duration and checkpoint changes. Best is the earliest checkpoint.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.4939 / 0.4576 / 0.4576"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": 0.4213,
+   "approach": "Score-gap >= 0.5 filter; same DPO. Best is the earliest checkpoint, last regressed below the start.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 0.4213 / 0.4165 / 0.3559"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 0.46,
+   "approach": "LR 5e-7, five-epoch ceiling with wall clock, cached reference log-probs.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'the learning rate falls from 5e-6 to 5e-7, the 772-step endpoint becomes a five-epoch ceiling'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 0.4479,
+   "approach": "Score-gap >= 1 filter; same DPO.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'first admits only pairs whose provided chosen-minus-rejected score is at least one'"
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": 0.4431,
+   "approach": "Schedule-only: unchanged DPO run to 10,212 steps.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'this was a schedule/checkpoint change, not a new algorithm'"
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__dpo_preference_alignment__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 0.4383,
+   "approach": "Twelve fresh 772-step pure-DPO branches (the shipped recipe); only branches 10-12 retained (seeds 42, 42, 43). Best-of-3 on the final metric then picks the luckiest replicate.",
+   "classification": "grey_area",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'a schedule of twelve fresh 772-step pure-DPO branches, retaining only branches 10–12'",
+    "branches scored 161/413, 167/413 (same seed 42) and 181/413 (seed 43): best-of-3 lifts an unchanged recipe from sigma ~0.093 to 0.122",
+    "benchmark_audit_agreement=disagree: page says '29 below the shipped baseline's 210/413' without noting that these replicates fail to reproduce that reference"
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

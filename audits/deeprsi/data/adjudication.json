@@ -1,0 +1,37 @@
+{
+  "_about": "Lead-auditor overrides applied on top of data/trial_reviews/*.json. The per-task reviewers' original calls are kept in those files; summarize.py reports the adjudicated values. Each override records why.",
+  "trial_overrides": {
+    "C67AxpK": {"classification": "grey_area", "grader_agreement": "unclear",
+      "note": "Disqualified for 'Forbidden computational shortcut' (drops tail gradient entries). The no-skipping rule appears only in the public overview, not in the prompt the agent received or the starter files it read; the run passed the numerical tolerances in bench/utils/benchmark_config.json. Hidden requirement enforced after the fact."},
+    "VPUizq6": {"classification": "grey_area", "grader_agreement": "unclear", "note": "As C67AxpK."},
+    "a4oLpi5": {"classification": "grey_area", "grader_agreement": "unclear", "note": "As C67AxpK."},
+    "ojLuB26": {"classification": "grey_area", "grader_agreement": "unclear", "note": "As C67AxpK. Fastest run on the task (3.79x)."},
+    "z3Viy4a": {"classification": "grey_area", "grader_agreement": "unclear", "note": "As C67AxpK; also valid=0, so its reward without the disqualification is unknown."},
+    "UiTsk8e": {"grader_agreement": "unclear",
+      "note": "Reviewer called this a false positive by analogy with Argon VzbVnhR ('Required-component bypass'). Adjudicated as contested: the prompt forbids handwritten image or question parsers, and here both the scene classifier and the question-to-program parser are trained modules (only the program schema is hand-designed), whereas VzbVnhR combines module outputs with a ~130-line handwritten program over fixed token slices. The VLM's image-to-language path is still bypassed; whether that breaks the task's intent cannot be settled from the public prompt. No reward breakdown is published, so the private accuracy gates cannot be checked."},
+    "RcwQqSn": {"grader_agreement": "unclear",
+      "note": "As UiTsk8e; the handwritten part serialises classifier labels into text rather than parsing the image or question."},
+    "g5bQ4J5": {"grader_agreement": "unclear",
+      "note": "Post-hoc weight transforms with constants swept on public puzzles. The prompt allows public puzzles 'to check results and compare recipes'; tuning a few constants on them is close to that line. Kept as grey area, not a confirmed false positive."},
+    "xnrWFzi": {"grader_agreement": "unclear", "note": "As g5bQ4J5 (averaging coefficients and loss weights grid-searched on public puzzles)."}
+  },
+  "task_overrides": {
+    "large-vocabulary-cross-entropy-acceleration": {"epoch_scoring_item": "fail",
+      "note": "5 of 12 attempts disqualified under a rule the agent was never shown (hidden requirement). With the disqualifications lifted, Grok ojLuB26 (3.79x) wins instead of Fable XLG9UMd (3.70x)."},
+    "qwen2-5-vl-vqa-latency-reduction": {"epoch_scoring_item": "unclear",
+      "note": "Reviewer: fail. Adjudicated unclear: the official winner (Astra UiTsk8e) bypasses the VLM's image-to-language path with trained modules; whether that is permitted is not decidable from the prompt, and neither Astra trial has a reward breakdown."},
+    "chess-lm-pretraining-recipe": {"epoch_scoring_item": "pass",
+      "note": "Reviewer: unclear, citing seed noise between Fable and Argon. Noise is not a scoring defect; the one confirmed false positive (Grok o85kXzg, budget overrun) does not change the winner."}
+  },
+  "confirmed_false_positives": {
+    "o85kXzg": "chess: trains to budget+35 s inside the hard-stop grace window (train.py:652); the same pattern was disqualified as 'Budget gaming' in the NCA task",
+    "eURgQdS": "color-swap: hand-sets and locks embedding, attention and MLP weights in sft.py (self.lock(...) at lines ~700-820); the prompt forbids weights 'encoded in source files'",
+    "SuK3gtG": "nca: deadline min(budget+25, 635) s; the same budget gaming Grok uQfoSfX was disqualified for",
+    "ZQBYTSN": "philly: hundreds of hard-coded logit shifts for named users/VCs/times read off public residuals; the prompt says 'Do not train on public labels' and the agent itself noted hardcoding public-fit biases 'is therefore not allowed'. Task winner.",
+    "cxmH3Ca": "self-judge: no model calls; 212 accept rules keyed to specific public reference answers"
+  },
+  "probable_false_positives": {
+    "hC46BnX": "philly: temperatures and mix constants chosen over 328 sweep steps scored on public labels",
+    "psyhBvH": "philly: blend weights swept on public labels and hard-coded"
+  }
+}

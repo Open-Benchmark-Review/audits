@@ -1,0 +1,119 @@
+{
+  "task": "svg-generation",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "The grader is correct and model-neutral, but the scale has low resolution: the floor is the untouched base, one standard error is about 2.8 points, 40 of 57 trials score exactly 0, and the best is 20.3, so everything below about $200 is mostly noise. The held-out mix of complexity groups is not disclosed, and the public SCHEMA.md still describes an older scorer.",
+  "noise_se_points": 2.8,
+  "floor": "Untouched gpt-oss-20b served by the trusted SGLang FP8 server at T=0.5, mean of two held-out runs (0.1955, 0.1815; raw floor 0.1885) measured 2026-10-05 with the v5 scorer (tests/task/task.yaml:93-98). This is a sensible 'do nothing' floor, but the two runs alone differ by 2.5 points, and the clamp hides regressions (raw 0.041 to 0.173 all show as 0). Blank and solid canvases score 0 mechanically (pipeline/sanity_v2_results.json).",
+  "ceiling": "The reference SVGs judged with the reference shown as both the reference and the candidate image (task.yaml:97-98), raw 0.7535. This self-comparison favours the ceiling: a candidate is always compared with a different drawing, so 100 is probably out of reach even for reference-quality work. It is not binding: the best observed raw is 0.303.",
+  "usable_range": "observed 0-20.3 of 0-100 (raw 0.041-0.303); 40 of 57 trials at 0; $10 max 5.3, $50 max 10.0, $200 max 20.3",
+  "feasible_at_10": "no: at $10 (about 2.9 H100-SXM hours, minus teacher-API spend for distillation data) 15 of 19 trials score 0 and the rest score 1.9-5.3, within about two standard errors of the floor. The top $10 score (gemini-3-8-flash d5q92y, 5.3) used $0.05 of compute.",
+  "budget_scaling": "Yes, but the gains are small: mean 0.7 / 2.3 / 4.1 and max 5.3 / 10.0 / 20.3 at $10 / $50 / $200 (all_trials.csv). Every positive score came from teacher distillation plus a LoRA on a 20B MoE, which needs both API money and H100 time. The free compute is limited to self-check H100 time (4 checks, about 25 min each) and the grader's 254 judge calls, which do not help training.",
+  "selfcheck_fidelity": "Partial. The self-check runs grading's evidence scan, weight audit, trusted server, parser and SVG schema (svg_selfcheck.py:225-329). It never judges a drawing, so it gives no quality signal. It projects the 10,800 s batch from 16 resampled public 'simple' icons (sample_plan, svg_selfcheck.py:58-65), while the held-out set is 92 detailed and 95 complex items with longer SVGs, so the projection is optimistic (the check warns about this itself, :306-308). A submission can pass the self-check and still score 0 by failing the review, by a slower held-out batch, or by being worse than the base.",
+  "judge": "gpt-6-sol (OpenAI) on the native OpenAI endpoint (verifier.py:159-160), reasoning_effort=low, max_completion_tokens 4096, no temperature or seed (validate.py:170-171), so grading is stochastic: about 0.01 raw between gradings, stated in the CONTRACT. It sees the instruction, a reference rendering and the candidate rendering, and gives six 1-10 grades. A malformed verdict fails the whole run, with no imputed score (validate.py:121-122). The calibration passed preregistered controls: reference self-score 0.78, constant circle 0.002, text injection 0 (pipeline/judge_calibration_v5_results.json). Agents can call the same judge through Spin and select against it; nothing forbids this.",
+  "neutrality": "The judge is an OpenAI model, and the most-used distillation teacher is also OpenAI (gpt-6-luna), so a same-vendor style preference is possible but unmeasured. OpenAI-family agents do not lead (gpt-6-astra 8.3 at $50 and 14.0 at $200; gpt-6-1-sol 3.2 / 7.2 / 0). The SVGenius source is hidden from agents (review.py:21-24), which is neutral. The gpt-oss base and SGLang serving are fixed for everyone. No harness-specific tools are needed.",
+  "reference_solution": "solution/ is the shared interface smoke fixture: the same bytes in every task, which writes a serve.sh that this task forbids and has no model/ (solution/README.md:1). It would fail the weight audit and score 0. pipeline/README.md:77 states that no trained-model GPU baseline was run before release, so nothing in the repo shows how much of the range can be reached.",
+  "issues": [
+    {
+      "category": "anchor",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The floor is the untouched base model, and its own two held-out runs differ by 2.5 points. With a standard error of about 2.8 points (macro mean over 67/92/95 items plus regrade noise) and a clamp at 0, the $10 and $50 rankings are mostly noise. 40 of 57 trials score exactly 0.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/task.yaml:93 'floor: 0.18848066150025083'",
+        "tasks/svg-generation/tests/task/task.yaml:97 'the mean of two runs (0.1955 and 0.1815'",
+        "tasks/svg-generation/environment/validation/CONTRACT.md:11 'grading the same weights twice can differ by about 0.01 in the raw score'"
+      ],
+      "affects": "All models at $10 and $50. Ranks among scores of 0-5 points are not meaningful. The clamp makes heavy regressions tie with the base."
+    },
+    {
+      "category": "heldout",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "All 30 public examples are 'simple' icons. The held-out set is macro-averaged over simple (67), detailed (92) and complex (95) groups. The CONTRACT says only 'mean over complexity groups': it names no groups and gives no counts. Agents learn that held-out items are more complex only from the self-check note, and the blog calls this deliberate.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/svg_data.py:153 'dev = [row for row in eligible if row[\"stratum\"] == \"simple\"][:dev_count]'",
+        "tasks/svg-generation/tests/task/pipeline/README.md:19 '254 evaluation examples: 67 simple, 92 detailed, 95'",
+        "tasks/svg-generation/tests/task/svg_selfcheck.py:306 'The public examples are simple icons only; detailed and complex held-out drawings usually need longer SVGs'"
+      ],
+      "affects": "Agents that tuned or selected only on the public set (e.g. Muse) regressed. This favours agents that guess the shift or read the self-check output closely."
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The public SCHEMA.md contradicts the CONTRACT and validate.py. It describes the retired v4 metric ('subject correctness times the mean of explicit attribute, relation and style correctness'). It also says an over-budget SVG 'counts toward the one-in-twenty limit', while the CONTRACT and parse_response score it 0 without counting it.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/pipeline/SCHEMA.md:5 'Score is subject correctness times the mean of explicit attribute, relation and style correctness'",
+        "tasks/svg-generation/tests/task/pipeline/SCHEMA.md:9 'it scores zero for that example and counts toward the one-in-twenty limit'",
+        "tasks/svg-generation/tests/task/validate.py:71-74 'an over-budget SVG or no SVG at all is an invalid SVG, scored 0 in score() without counting toward the failed-request limit'"
+      ],
+      "affects": "All agents equally. It is confusing, and the stricter wording may make agents more careful than they need to be. No score effect was observed."
+    },
+    {
+      "category": "anchor",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The ceiling is each reference judged against an identical copy of itself, which favours the ceiling. A candidate is always compared with a different drawing. So 100 is probably out of reach, and the normalized scores understate progress. This is not binding at the observed 0-20.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/task.yaml:98 'Ceiling: the reference SVGs themselves (reference shown as both images)'",
+        "tasks/svg-generation/tests/task/validate.py:39 'The FIRST image is a reference drawing ... The SECOND image is the candidate you grade.'"
+      ],
+      "affects": "All models equally. It compresses the scale."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The judge is stochastic: no temperature or seed is set, and it runs at reasoning_effort low. A single malformed verdict among the 254 aborts the run with 'no score imputed' after transport-only retries. This is an infrastructure failure mode, not a candidate zero, but it is not deterministic.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/validate.py:170-171 'judge(model=JUDGE_MODEL, messages=messages, reasoning_effort=\"low\", max_completion_tokens=JUDGE_OUTPUT_TOKENS)'",
+        "tasks/svg-generation/tests/task/validate.py:122 'Malformed or incomplete judge response; no score imputed'"
+      ],
+      "affects": "Any trial, at random. None was observed in the audited trials."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The graded SVG extractor's code-fence regex backtracks quadratically or cubically on an answer that is an unclosed or long-tagged ``` fence with long blank runs, and it holds the GIL, so no deadline can stop it. The self-check screens public answers for this, but the graded path runs the regex with no guard.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/svg_render.py:46 'FENCE = re.compile(r\"```[A-Za-z0-9_+-]*[ \\t]*\\r?\\n?([\\s\\S]*?)\\r?\\n?[ \\t]*```\\Z\")'",
+        "tasks/svg-generation/tests/task/svg_selfcheck.py:40-42 'backtracks over every split of a fence's opening and over every run of blanks ... neither the batch deadline nor the check's budget can interrupt it'"
+      ],
+      "affects": "Only a model that emits that shape on a held-out item. It would stall the verifier past its 13,500 s lifetime. Not observed."
+    },
+    {
+      "category": "feasibility",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "No feasibility baseline was run before release. At $10, a 20B-MoE distillation plus LoRA leaves little budget for teacher data. Observed $10 scores are 0 for 15 of 19 trials and at most 5.3. The top $10 trial used $0.05 of compute, which suggests near-base submissions land a few points above 0 by noise.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/pipeline/README.md:77 'no trained-model GPU baseline has been performed'",
+        "audits/frontierml/data/all_trials.csv 'svg-generation-d5q92y,svg-generation,gemini-3-8-flash,10,0.0534...,pass,4,2.3,0.05'"
+      ],
+      "affects": "The $10 tier for all models. Its ranking reflects noise."
+    },
+    {
+      "category": "neutrality",
+      "severity": "low",
+      "status": "suspected",
+      "finding": "The judge (gpt-6-sol) and the most common distillation teacher (gpt-6-luna) are both OpenAI models. A same-vendor style preference could reward agents that chose an OpenAI teacher. This was not measured. Observed winners are Claude agents, many of which used gpt-6-luna as the teacher.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/validate.py:26 'JUDGE_MODEL = \"gpt-6-sol\"'",
+        "audits/frontierml/tasks/svg-generation.md 'A frontier teacher (mostly gpt-6-luna ...)'"
+      ],
+      "affects": "Agents choosing teachers. Any effect is likely small."
+    },
+    {
+      "category": "spec",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Some reviewer permissions are hidden from the agent: teacher distillation and direct weight edits on top of real training (lm_head scaling, adapter averaging) are allowed but never stated. The rule 'don't train on any public text-to-SVG evaluation suite' is hard to check without naming suites, and SVGenius, the real source, is withheld.",
+      "evidence": [
+        "tasks/svg-generation/tests/task/review.py:15-18 'Direct weight edits on top of real in-session training are allowed ... Training data generated by other models (distillation from a teacher) is allowed.'",
+        "tasks/svg-generation/tests/task/review.py:21-22 'the evaluation source (the SVGenius text-to-SVG benchmark) is never named to it'"
+      ],
+      "affects": "Cautious agents may have avoided allowed methods. No false positives or negatives were found in the audit."
+    }
+  ]
+}

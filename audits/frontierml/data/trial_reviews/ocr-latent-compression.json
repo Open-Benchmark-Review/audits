@@ -1,0 +1,354 @@
+{
+ "task": "ocr-latent-compression",
+ "task_level": {
+  "spec_issues": [
+   "The prompt and CONTRACT.md forbid training, calibrating or selecting 'on the validation or test split of any public dataset or benchmark'. Unlike maple-vlm and music-transcription (task.yaml shipped_examples_free: true, and a review clause saying the shipped examples may be used for selection), ocr-latent-compression's task.yaml has no shipped_examples_free flag and the prompt never says whether /task/public/validation.jsonl counts. Agents split on it: DeepSeek (11ia31 [309], 3vvlac [127], 40wnhk), Argon (37dbsh, 5fxb6m) and Astra ('Weights were frozen before public validation', 4t69xs closing message) treated it as off-limits for selection; Fable 12nqia selected checkpoints and checkpoint averages on it and said so in its README ([221]).",
+   "CONTRACT.md says 'Name the source of every training, calibration and selection corpus ... I will check for training-data provenance', but tests/task/review.py (lines 3-38) gives the reviewer only three checks (learned_discrete_visual_codes, decoder_generates_text_from_codes_only, served_weights_are_the_trained_model) plus the global harness-credentials check. There is no provenance or data-split check, so the validation/test-split rule is not enforced by anyone for this task. The grade pages confirm it: every trial shows 4 checks and none is about data.",
+   "review.py:16 allows 'Deterministic image preprocessing'. Opus 2pu2n0, lbs8ib and 7sh96e use a pixel-threshold blank/ink mask that decides which grid cells get bits and ship part of it inside the code list. It carries layout, not text, and the reviewer passed it all three times; no other model used one, so there is no inconsistency, but the prompt's 'Use a neural encoder to produce the codes' does not obviously cover a hand-coded mask."
+  ],
+  "verifier_issues": [
+   "Rescaling (tests/task/task.yaml:49-56): 0 = empty text, 100 = unmodified DeepSeek-OCR Base mode reading the image (0.8931 word similarity on the 400 held-out images), clamped. The 100 public images give 0.8978 with the same pipeline, so public and held-out are close in difficulty; reported agent public/dev scores track the graded raw metric within about 0.01-0.03 (e.g. Opus 2pu2n0 validator 0.71-0.745 on its own dev vs 0.7375 graded; Fable 12nqia 0.610 public vs 0.6055 graded; Argon 37dbsh 0.4597 public vs 0.4522).",
+   "Held-out is 400 rendered pages; with per-page similarity SD around 0.3, the standard error of the mean is about 0.015 raw, about 1.7 points on the published scale. Paired across models on the same pages it is smaller.",
+   "The grader re-decodes about 5% of code lists and keeps the lower score on mismatch, so batch-dependent bf16 numerics cost a little (Fable 1fvw9l reviewer note: 'Repeated inputs sometimes decode slightly differently').",
+   "No trial in this task accessed the inductionlabs/frontier-ml-tasks dataset, the benchmark repo or frontierml.org (grep over all 18 trajectories)."
+  ],
+  "noise": "Wallet ordering is sensible for Opus (26.9 < 54.4 < 82.6), Astra (36.4 < 57.5 < 64.1) and DeepSeek at $200, flat for Fable ($50 67.9 vs $200 67.8) and inverted for Argon (50.6 > 43.2 > 36.0) and Muse (15.3 > 3.3 > 1.9). The inversions come from different architectures (Argon moved from KLT/VQ codebooks to learned encoders that trained less), not from grading noise. Winners: $10 Fable 3p5edt 56.1 vs Argon 37dbsh 50.6 (5.5 points, about 2-3 SE unpaired); $50 Fable 1fvw9l 67.9 vs Astra 4t69xs 57.5; $200 Opus 2pu2n0 82.6 vs Fable 67.8. Only the $10 margin is small enough that noise could matter, and even there a flip is unlikely.",
+  "elicitation": "Every serious trial built on the supplied DeepSeek-OCR artifact (DeepEncoder + MoE LM) with a trained bottleneck; the difference is how bits are allocated and how long the end-to-end fine-tune ran. Opus at $10 rented an A100 and spent most of its budget on bottleneck designs that did not learn (FSQ end-to-end, TiTok-style, Q-Former) before a PCA + Lloyd-Max transform coder ([176]-[244]), which explains its 26.9. Gemini trials are re-runs (-r2); originals are unpublished. Gemini hit repeated 429 quota errors from the harness (e.g. 37dbsh [368]) without visible effect on the outcome.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "No false positive, false negative or infrastructure zero changes a winner. The one rule question (Fable 12nqia selecting checkpoints on the public validation images, unchecked because review.py has no provenance check) affects a trial that is not a winner at $200 (67.8 vs Opus 82.6); the $10 and $50 Fable winners selected on their own synthetic held-out pages.",
+  "science_vs_gaming": "Mostly legitimate engineering. All scored trials reuse DeepSeek-OCR and learn a 2 KB bottleneck (FSQ, product VQ, PCA + Lloyd-Max, KLT + spherical VQ) on self-rendered synthetic pages from public text corpora, then fine-tune the decoder. The strongest transferable idea is Opus 2pu2n0's adaptive bit allocation: a cheap blank-cell bitmap plus nested FSQ dimensions so dense pages get about twice the bits per inked token ([98]-[99], dev 0.395 -> 0.429 at matched steps [128]), together with checkpoint averaging (+0.06 dev, [165]). Opus 7sh96e found the same lesson the hard way: coverage of inked cells matters more than per-cell fidelity ([262]-[265]). Benchmark exploitation is limited to one trial selecting checkpoints on the 100 public images (Fable 12nqia), with no measurable effect on its held-out score."
+ },
+ "trials": [
+  {
+   "model": "claude-opus-5-5",
+   "trial": "7sh96e",
+   "wallet": 10,
+   "official_score": 26.9,
+   "official_review": "pass",
+   "approach": "After several learned-bottleneck designs failed on an A100 within $10, shipped transform coding: DeepEncoder cell features projected on a per-layout PCA basis and quantized with an 8-level Lloyd-Max quantizer, sending only ink-dense cells, with the DeepSeek LM fine-tuned to read the reconstructed features.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[176]-[244]: end-to-end FSQ, KV distillation, TiTok-style global latents and a Q-Former compressor all stalled or collapsed ('No global-latent approach has learned to read within budget (held-out accuracy only 0.05-0.07)', [244]).",
+    "[262]-[269]: coverage beats fidelity: k=128 -> 0.167, k=96 -> 0.214, k=64 -> 0.237, k=48 (111 cells) -> 0.242.",
+    "Reviewer: per-layout PCA basis + fixed 8-level Lloyd-Max quantizer on ink-masked DeepEncoder cells, codebook 8, max 16,323 bits; 'Held-out synthetic, 120 pages (seed 777); used to select the checkpoint' (README)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "lbs8ib",
+   "wallet": 50,
+   "official_score": 54.4,
+   "official_review": "pass",
+   "approach": "DeepEncoder with a 32-dim, 4-level FSQ bottleneck and an edge-based blank mask, trained end to end through the DeepSeek MoE decoder on 113k Playwright-rendered pages of arXiv abstracts, with checkpoint choice on its own synthetic val2.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: DeepEncoder -> LayerNorm, Linear(1280->32), tanh, 4-level FSQ, edge-based blank-cell mask, packed into 16-bit words (codebook 65536); trained with next-token CE.",
+    "[303] LR experiment on a second box; [366] 'r5-final scores 0.405 on val2 vs. 0.410 for r4-final, so r4-final stays the final model' (val2 is its own synthetic set).",
+    "113k self-rendered pages from gfissore/arxiv-abstracts-2021 (reviewer)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "2pu2n0",
+   "wallet": 200,
+   "official_score": 82.58,
+   "official_review": "pass",
+   "approach": "DeepSeek-OCR encoder at aspect-matched non-square grids, an 8-level FSQ bottleneck with adaptive nested dimensions (blank-cell bitmap plus more dimensions per inked token), trained end to end on about 560k Chromium-rendered synthetic pages for about 13.7k steps on 4 GPUs, then an 8-checkpoint average selected on its own dev split.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[98]-[99]: 'adaptive bit allocation so blank tokens get a compact 252-bit bitmap while remaining bits are spread across non-blank tokens using nested FSQ dims (21-64 depending on sparsity)'.",
+    "[60]: 'a separate 400-page dev split of my own for model selection, keeping the task's validation set untouched for evaluation only'; validation used for orientation at [85] and [150] ('purely for orientation').",
+    "[164]-[165], [178]: checkpoint averaging 0.646 -> 0.704 -> 0.745 on dev; shipped candD = average of 8 late checkpoints (reviewer, sha ef9eaa3b...).",
+    "Reviewer: 8-level FSQ digits packed 7 per 21-bit code (codebook 2,097,152), blank/ink bitmap from pixel thresholding (allowed by review.py:16)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "3p5edt",
+   "wallet": 10,
+   "official_score": 56.09,
+   "official_review": "pass",
+   "approach": "DeepSeek-OCR DeepEncoder with a trained 16-level FSQ head (4096 codes x 4 bits), an MLP that maps codes back to vision embeddings, and a fine-tuned DeepSeek MoE decoder, trained on synthetic renders of public text in three phases within $10. A ridge length prior on the codes caps generation.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: frozen SAM + trainable CLIP-L DeepEncoder, trained FSQ head [16,1280] at 16 levels, 4096 codes x 4 bits = 16,384 bits; CodeDecoder MLP into 273 image embeddings; fine-tuned DeepSeek MoE LM.",
+    "Selection on its own synthetic held-out pages (seed 999); public validation used once after training ('used solely for a final sanity check', README draft at [73]).",
+    "fit_len.py ridge length prior is 'Fitted on training pages; validated on the synthetic held-out pages' ([140])."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "1fvw9l",
+   "wallet": 50,
+   "official_score": 67.91,
+   "official_review": "pass",
+   "approach": "Frozen DeepEncoder with a trained transformer compressor to 63 binary FSQ dimensions per token (16,128 bits), a decompressor back to 1280-d embeddings and a fine-tuned DeepSeek-V2 decoder, trained on synthetic pages from ML-ArXiv/other public text with a 3-stage schedule.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: frozen DeepSeek-OCR vision stack, trained 4-layer Compressor 2048->63 dims per token, binary FSQ, 256 x 63 = 16,128 one-bit codes; Decompressor + fine-tuned LM; stages A-C.",
+    "Public validation images appear in a normalization diagnostic ([89]: 'Per-image normalization fixes things ... validation scores hit 0.99/0.91/0.62/0.52 at checkpoint 2500. I'll lock this in'); this fixes a train/serve batch-norm mismatch rather than tuning to the set, and selection otherwise used its held-out synthetic eval ('Stage C finished at step 9090 with the best held-out eval so far (0.83)', [137]).",
+    "Public 0.627 locally vs 0.6065 graded."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "12nqia",
+   "wallet": 200,
+   "official_score": 67.8,
+   "official_review": "pass",
+   "approach": "DeepEncoder -> FSQ (16 levels, grid id + 252 x 16 codes = 16,132 bits) -> up-MLP -> fine-tuned DeepSeek-3B-MoE, initialised by PCA of DeepEncoder features, trained on synthetic arXiv/abstract pages across three boxes; the shipped weights are a 5-checkpoint average chosen by validate.py score on the public validation images.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[94] eval_ckpt.sh runs '/task/validate.py --server-url ... --data /workspace/val/validation.jsonl --output /workspace/logs/val_$TAG.json' for each checkpoint.",
+    "[221] README: 'eval/: validation reports of checkpoints produced with the task's validate.py against the served model on the task's public validation images (used for checkpoint selection only; never trained on).'",
+    "Late choices made on those scores: 'Checkpoint averaging helps: the average of run 1b's step 7000 and 8000 scores 0.565'; 'The five-checkpoint average now scores 0.610 locally, beating the current submission's 0.593' (val_avg78/val_avg1011/val_avg101112/val_avgmulti.json, [291]).",
+    "Also ran 20-30-step smoke tests of train.py on validation.jsonl ([55], [89]: 'train.py --data /workspace/val/validation.jsonl --out /workspace/ckpt/smoke'); those checkpoints were not in the shipped resume chain (run1 -> run1b -> run8/run1c per reviewer).",
+    "Effect looks negligible: 0.610 public vs 0.6055 graded. review.py has no data-provenance check, so the reviewer never assessed this; strict reading of 'select on the validation ... split of any ... benchmark' would forbid it, but the task never says whether its own 100 public images are covered."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "o8kwvf",
+   "wallet": 10,
+   "official_score": 36.4,
+   "official_review": "pass",
+   "approach": "Low-resolution (512 px) DeepEncoder features compressed by a learned product VQ (32 codebooks x 256) with a synthesis network back to embeddings, and attention-only fine-tuning of the DeepSeek LM served through vLLM.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: 512 px input, SAM ViT-B + CLIP-L + projector to 64 x 1280, learned analysis/refine network, argmin over 32 learned codebooks [32,256,40]; vLLM decoder with merged attention updates.",
+    "Closing message: 'Public diagnostic word similarity: 0.3191' (graded 0.3251)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "4t69xs",
+   "wallet": 50,
+   "official_score": 57.53,
+   "official_review": "pass",
+   "approach": "Separate document and screenshot codecs (product VQ and FSQ) on DeepEncoder features with a trained transformer codec and LoRA-adapted DeepSeek decoder, exactly 2,048 bytes per image, selected on its own synthetic pages.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: per-kind variants (document: product VQ [8,256,64]; screenshot: FSQ-style rounding), learned 4-layer transformer codec, 2048 x 8-bit codes, vLLM decoder with merged LoRA.",
+    "Closing message: 'Weights were frozen before public validation.' Public 0.519 vs graded 0.5138."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "6d5fql",
+   "wallet": 200,
+   "official_score": 64.1,
+   "official_review": "pass",
+   "approach": "A 768-wide transformer codec with 4-level FSQ on DeepEncoder features (2,048 bytes), attention fine-tuning of the DeepSeek LM, higher-resolution and desktop-refinement variants and checkpoint averaging, all selected on held-out slices of its own synthetic training corpus.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: VisualCodec analysis transformer (width 768, depth 6, latent 32), 4-level FSQ packed 4 per byte (2048 codes), 48 trained attention tensors merged into the LM; candidate refined_desktop_7500.",
+    "[472]-[912]: selection on 'reserved training-corpus diagnostics' (0.82 private metric) - big gap to the 0.5725 graded score, so its own dev set was easier than held-out, but no use of public validation for selection ([1064]: 'The model selection is now frozen ... then I'll run the required public validator').",
+    "[1160]: final selfcheck 82 s startup, encode 48.2 img/s, decode 3.33 img/s."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "37dbsh",
+   "wallet": 10,
+   "official_score": 50.64,
+   "official_review": "pass",
+   "approach": "Training-light transform coding: a fitted 2D KLT and large spherical VQ codebooks over SAM features, a residual refiner and LoRA on the DeepSeek LM, with a decode-length cap chosen for throughput.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: SAM x3 features -> 2D spatial-channel KLT, per-band rotations, nearest-codeword search over 65536-entry spherical codebooks (1024 codes); ResidualX3Refiner + fine-tuned vision model + LoRA LM.",
+    "[367]: swept a word-count cap on the public validation predictions ('for max_w in [250, ... 1200]': 0.4581 at 500 vs 0.4594 at 1200) to choose max_new_tokens for throughput; this trades away 0.001 of score to pass the speed gate, so it is not score-fitting.",
+    "Public validator 0.4597 vs graded 0.4522."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "4oofdn",
+   "wallet": 50,
+   "official_score": 43.16,
+   "official_review": "pass",
+   "approach": "PCA plus Lloyd-Max and k-means VQ codebooks over frozen SAM features, with a learned feature map, denoiser and LoRA-tuned DeepSeek decoder on the decode side.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: frozen SAM, learned PCA (mu_sam, V, std_pca), Lloyd-Max scalar codebooks and a 4-D k-means VQ, bit-packed to 1020 uint16 codes; W_w map, CLIP, post-CLIP denoiser and LoRA LM on decode.",
+    "[7]: 'I'm taking extreme care not to use /task/public/validation.jsonl for training, calibration, or model selection.'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5fxb6m",
+   "wallet": 200,
+   "official_score": 35.99,
+   "official_review": "pass",
+   "approach": "A learned fusion encoder over global and local DeepEncoder tokens with FSQ to 1024 codes and a reconstruction network into the DeepSeek LM, trained on 6,400 synthetic pages; the smaller data and simpler decoder fine-tune scored below its own $10 KLT/VQ run.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: 1024 global view + six 640 crops through the DeepSeek visual path, Fused256 encoder (ConvNeXt + transformer + skip) quantized to 38 FSQ dims per token, 1024 codes; decoder reconstructs 256 x 1280 embeddings; fine-tuned v/o projections.",
+    "Data: 6,400 training images from disjoint train slices of CShorten/ML-ArXiv-Papers and fancyzhx/ag_news (data_manifest notes at [504])."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "4lyrej",
+   "wallet": 10,
+   "official_score": 15.26,
+   "official_review": "pass",
+   "approach": "A small MLP FSQ tokenizer on frozen DeepEncoder tokens decoded by the frozen DeepSeek LM; only the bottleneck was trained, so most text detail was lost.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer/closing message: frozen DeepEncoder, MLP FSQ 1280->512->32 dims at 4 levels, grouped to 1024 codes in [0,65536), frozen DeepSeek LM with 'Free OCR.' prompt."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "5kdsow",
+   "wallet": 50,
+   "official_score": 3.31,
+   "official_review": "pass",
+   "approach": "Pooled DeepEncoder features into 1024 FSQ slots with LoRA on the decoder; the model barely learned to read (raw 0.03).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: Compressor to 1024 slots x 4 dims x 16 levels, LoRA r=8 on the LM; raw 0.0296 (diagnostic word F1 0.059)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3xk4sz",
+   "wallet": 200,
+   "official_score": 1.91,
+   "official_review": "pass",
+   "approach": "Swapped in a Qwen language decoder behind a DeepEncoder FSQ bottleneck; training was unstable and the decoder did not learn to read (raw 0.017).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: DeepEncoder on local tiles, 2-layer transformer FSQ to 4 x 32 levels (codebook 1,048,576), Qwen decoder; q4 log shows NaN gradient skips ('bad_grad_skip ... gn: NaN', [200]); raw 0.017."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "11ia31",
+   "wallet": 10,
+   "official_score": 4.37,
+   "official_review": "pass",
+   "approach": "Frozen DeepEncoder with a small adapter and 5-dimensional FSQ per token, LoRA on the LM; too few bits per token reached the decoder and output was mostly wrong (raw 0.039).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: frozen DeepEncoder, per-layout mean subtraction, 3-layer transformer adapter, FSQ 5 dims x 8 levels (codebook 32768), LoRA LM; raw 0.039.",
+    "[309]: 'I'll use it only for a final sanity check, not for model selection/tuning.'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "40wnhk",
+   "wallet": 50,
+   "official_score": 2.19,
+   "official_review": "pass",
+   "approach": "Ignored the DeepSeek-OCR artifact and trained a ViT encoder plus a cross-attention Qwen2.5-0.5B decoder from scratch in about 3 hours; it did not learn to read (raw 0.02).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: from-scratch conv-stem windowed ViT -> 32 x 64 grid -> FSQ 4^4 -> 2048 codes; Qwen2.5-0.5B with cross-attention in all 24 layers; raw 0.0196."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "3vvlac",
+   "wallet": 200,
+   "official_score": 15.25,
+   "official_review": "pass",
+   "approach": "Trained only a latent autoencoder that compresses frozen DeepEncoder latents to 1024 x 16-bit FSQ codes and reconstructs them for the frozen DeepSeek decoder; reconstruction loss on latents transferred poorly to text (raw 0.136).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer/closing message: frozen DeepSeek-OCR tower and frozen 3B MoE decoder; only a 305.5M-parameter latent autoencoder (width 1024, depth 12) trained to map 256 x 1280 latents to 1024 grouped-FSQ codes x 16 bits; WikiText-103 train renders.",
+    "[127]/[908]: kept validation.jsonl out of training and selection."
+   ],
+   "confidence": "high"
+  }
+ ]
+}

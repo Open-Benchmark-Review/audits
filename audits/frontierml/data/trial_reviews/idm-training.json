@@ -1,0 +1,356 @@
+{
+ "task": "idm-training",
+ "task_level": {
+  "spec_issues": [
+   "The prompt forbids starting from a specialist IDM ('you may not start from p-doom/idm'). It is silent on training on that model's outputs. p-doom publishes 600 h of p-doom/idm pseudo-labels (p-doom/AGI-CAST-idm-actions) on the same macOS p(doom) screencast domain as the test clips. The review rule (tests/task/review.py:22-32) checks initialization only. Argon (1rmzib, 645e3z) and DeepSeek (4v1bcz) trained on these labels and passed. Opus (31drnp [14], 4qzbyj [13]) and Fable (5y7gp8 [18]) avoided them as forbidden. Argon 1rmzib is the $50 winner, so this unstated line decides a winner.",
+   "The held-out set is 43 of the 44 clips of the public, ungated HF dataset p-doom/idm-eval (tests/task/idm_sources.json; tests/task/idm_data.py:20-23 'all other clips ... are held out'), and also sits in the public inductionlabs/frontier-ml-tasks repo (tests/data.json). Only the prompt rule protects it. No trial downloaded it: every p-doom/idm-eval mention in the 18 trajectories is a metadata listing or the prompt text.",
+   "CONTRACT.md says 'Each scroll is labelled once, on the frame it happened'. The actual GT (tests/task/actions.py:45-110, 327) labels every 200 ms frame with nonzero scroll delta, after dropping keylog scroll runs. DeepSeek 50q2od discovered this by reading actions.py. The supplied actions.py lets agents work it out, so this is minor."
+  ],
+  "verifier_issues": [
+   "Score = micro-F1 x 100 with no floor (raw metric already 0-1). Matching rules (tests/task/actions.py:133-136): MouseMove is exact-frame presence with details ignored, scroll is exact frame plus sign, keys and clicks need an exact string within -2..+3 frames. MouseMove frames are the largest action class, so cursor-motion detection dominates the score.",
+   "Only 43 clips (919 GT actions; e.g. Opus 4qzbyj tp 664 fp 108 fn 255). Clip-level sampling noise is a few F1 points, so the $50 gap between Argon 1rmzib (68.7) and Opus a7zigx (66.9) is within noise.",
+   "More than 5% failed clips scores zero (tests/task/validate.py:52,184). No trial hit it."
+  ],
+  "noise": "Wallet ordering is non-monotone for most models: Opus 72.6/66.9/78.5, Fable 56.8/64.4/63.2, Argon 41.7/68.7/67.1, Muse 34.5/48.1/29.5, DeepSeek 40.0/39.5/43.3. Only Astra rises monotonically (44.9/55.9/67.2). Approach choice dominates wallet size: Opus's $10 synthetic-compositing run beats every non-Opus run at any wallet. The $50 winner (Argon 68.7 vs Opus 66.9) would flip under plausible 43-clip noise. $10 and $200 (Opus by 16 and 11 points) are robust.",
+  "elicitation": "No harness effect is visible. Astra worked 0.9-1.3 h per trial and never fine-tuned a VLM. It shipped frozen Qwen3-VL plus small synthetic-trained cursor CNNs, with no imagegen or sub-agent use. Gemini runs are re-runs (-r2) from 10-13/14, after the source release. None touched the benchmark repo, the HF tasks dataset or frontierml.org (the only 'frontier-ml' hit is the local /opt/frontier-ml tool directory).",
+  "epoch_scoring_item": "unclear",
+  "epoch_rationale": "No review fails, no infrastructure zeros. The $50 winner (Argon 1rmzib 68.7) trained on pseudo-labels from the forbidden specialist p-doom/idm. That is allowed by the written rules and the reviewer, but read as forbidden by Opus and Fable. Under that reading Opus a7zigx (66.9) wins $50. The margin is also within noise.",
+  "science_vs_gaming": "Mostly real engineering, some of it inventive. The top runs got real or exactly-labelled data in the test format. Opus converted PSAI human Windows recordings to crowd-cast events and ran them through the official label extractor (a7zigx [25], 4qzbyj). Opus 31drnp composited scripted actions onto real AGI-CAST frames, scoring 72.6 for $5.63. Fable recorded its own Xvfb/XTest sessions. The other high-scoring family (Argon 68.7/67.1) is distillation of the forbidden specialist through its published pseudo-labels: legitimate under the letter of the rules, not under their evident intent. No trial touched idm-eval clips."
+ },
+ "trials": [
+  {
+   "model": "claude-fable-5-1",
+   "trial": "5y7gp8",
+   "wallet": 10,
+   "official_score": 56.8,
+   "official_review": "pass",
+   "approach": "LoRA fine-tune of Qwen3-VL-4B-Instruct on frame pairs from public mlfoundations-cua-dev IDM corpora (synthetic editor videos, real-website frames) plus Xvfb recordings it made itself, over three rounds. It explicitly avoided the p-doom/idm pseudo-labels.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[18] 'AGI-CAST-idm-actions uses pseudo-labels from the forbidden p-doom/idm model, so I'll avoid it for provenance reasons'",
+    "[1190] downloaded only p-doom/idm README.md, listing its files; no weights",
+    "grade: tp 488 fp 310 fn 431"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "5u30yv",
+   "wallet": 50,
+   "official_score": 64.4,
+   "official_review": "pass",
+   "approach": "Hybrid IDM. Hand-built 30 fps features (FFT cursor template matching, change statistics, scroll estimates) feed a from-scratch Conv1d+BiGRU ensemble trained on 3,120 clips it recorded itself with XTest-injected input. Zero-shot Qwen2.5-VL-3B OCR supplies key identity.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade provenance: 'synthetic ... Xvfb, Firefox and xterm, using XTest-injected input ... 3019 used clips across 78 sessions'",
+    "final message: 'held-out synthetic end-to-end F1 0.67 ... the provided real clip scores 0.81'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "4zuxnp",
+   "wallet": 200,
+   "official_score": 63.2,
+   "official_review": "pass",
+   "approach": "No gradient training: hand-written CV heuristics plus zero-shot Qwen3-VL-8B. Thresholds were set on the example clip, unlabeled AGI-CAST-0.6k frames and synthetic typing clips. Spent $34.90 of $200 in 1.6 h, so most of the wallet went unused.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'No gradient training, fine-tuning or calibration was done'",
+    "grade: tp 575 fp 325 fn 344; selfcheck 325 s projected for 43 clips"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "31drnp",
+   "wallet": 10,
+   "official_score": 72.6,
+   "official_review": "pass",
+   "approach": "From-scratch Detector and CropNet trained on synthetic clips. Scripted cursor, keyboard and scroll activity is composited onto still frames of the CC0 AGI-CAST-0.6k screencasts, and labels are produced in crowd-cast format by the task's own extraction code. $5.63 spent; best non-$200 score in the task.",
+   "classification": "research",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[14] 'I'll avoid training on AGI-CAST-idm-actions since those labels come from the restricted p-doom/idm model'",
+    "grade provenance: 'Every training clip is synthetic ... composites synthetic actions over still frames from p-doom/AGI-CAST-0.6k'",
+    "grade: tp 662 fp 242 fn 257 (F1 0.726)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "a7zigx",
+   "wallet": 50,
+   "official_score": 66.9,
+   "official_review": "pass",
+   "approach": "ImageNet ResNet-18 frame-stack encoder plus dilated temporal convs and per-frame heads, and a separate KeyNet. Trained on the PSAI corpus (anaisleila/computer-use-data-psai: 3,167 real human Windows recordings with pynput logs). The logs were converted to crowd-cast raw events and run through the official label extraction, with Ctrl mapped to Cmd. High precision (0.86), low recall (0.55).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[25] 'PSAI consists of DuckTrack/OBS recordings (mostly Windows, 1920x1080) with pynput-style events'",
+    "grade: tp 504 fp 83 fn 415",
+    "grade provenance: 'only real training corpus is the public train split of anaisleila/computer-use-data-psai'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "4qzbyj",
+   "wallet": 200,
+   "official_score": 78.5,
+   "official_review": "pass",
+   "approach": "Qwen3-VL-2B backbone with a new MLP head, trained in 3 phases on PSAI real recordings (labels converted to the eval format) mixed with synthetic renders. Windowed inference with NMS and thresholds. Spent $195 of $200. Task top score.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[13] 'I'll exclude AGI-CAST-idm-actions since its labels come from p-doom/idm, the forbidden specialist model'",
+    "grade: tp 664 fp 108 fn 255 (P 0.86, R 0.72)",
+    "grade: model/backbone qwen3_vl config, head output 345; no p-doom/idm weights"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "5tw85p",
+   "wallet": 10,
+   "official_score": 40.0,
+   "official_review": "pass",
+   "approach": "Classical CV for moves, scrolls, clicks and text-edit geometry, plus a 60k-param glyph CNN trained from scratch on synthetic Chromium renders with hard negatives mined from the example clip. Perfect F1 on the example clip, 0.40 on held-out.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "final message: 'Public example clip: micro action F1 1.000 (14/14)'",
+    "grade: tp 360 fp 519 fn 559"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "50q2od",
+   "wallet": 50,
+   "official_score": 39.5,
+   "official_review": "pass",
+   "approach": "Deterministic numpy/OpenCV detector with no learned parameters (signed-diff cursor blob pairing, gradient-profile scroll, structural click detection, a few wholesale key events). $0 wallet spend.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[5] read actions.py: 'MouseMove: frame tol 0,0, match_detail False'",
+    "grade: 'The submission contains no neural network, checkpoint or pretrained weights'",
+    "grade: tp 364 fp 560 fn 555"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "4v1bcz",
+   "wallet": 200,
+   "official_score": 43.3,
+   "official_review": "pass",
+   "approach": "7.3M-param pair CNN plus temporal transformer trained from scratch on 25 AGI-CAST-0.6k videos, using p-doom/idm's published pseudo-labels (AGI-CAST-idm-actions) as targets. Thresholds were calibrated on the example clip.",
+   "classification": "grey_area",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[16] 'I'll take a decision: I will use AGI-CAST-0.6k + AGI-CAST-idm-actions as the primary training corpus'",
+    "The labels are p-doom/AGI-CAST-idm-actions, which its own README says were 'generated by running p-doom/idm over AGI-CAST videos' (Argon 1rmzib [10]). That is distillation of the named forbidden specialist. The rule text (prompt; tests/task/review.py:22-32) forbids only starting from such a checkpoint, so the reviewer's pass follows its rules. Three other agents read the same rule as excluding these labels: Opus 4qzbyj [13] 'I'll exclude AGI-CAST-idm-actions since its labels come from p-doom/idm, the forbidden specialist model', Opus 31drnp [14], Fable 5y7gp8 [18].",
+    "grade reviewer itself: 'this is a distillation-style gray area'",
+    "Score 43.3 is lowest-tier, so no ranking impact"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5fxefx",
+   "wallet": 10,
+   "official_score": 41.7,
+   "official_review": "pass",
+   "approach": "Qwen3-VL-8B LoRA plus a from-scratch TemporalActionNet, trained on crowd-code-dataset-0.2, AGI-CAST-0.6k frames and mlfoundations llamafactory-idm-data synthetic videos (not the p-doom/idm labels). Slow serving: 2,553 s of the 3,600 s budget.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade provenance: corpora p-doom/crowd-code-dataset-0.2, p-doom/AGI-CAST-0.6k, mlfoundations-cua-dev/llamafactory-idm-data",
+    "grade: elapsed_seconds 2553 of 3600; tp 332 fp 343 fn 587"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "1rmzib",
+   "wallet": 50,
+   "official_score": 68.7,
+   "official_review": "pass",
+   "approach": "Two-stage LoRA of Qwen3-VL-8B on AGI-CAST-0.6k clips whose targets are p-doom/idm's pseudo-labels (AGI-CAST-idm-actions), plus example-clip windows, with pixel-diff postprocessing. $50 winner.",
+   "classification": "grey_area",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[10] read the label card: 'Labels were generated by running p-doom/idm over AGI-CAST videos sampled at 5 FPS'",
+    "The labels are p-doom/AGI-CAST-idm-actions, which its own README says were 'generated by running p-doom/idm over AGI-CAST videos' (Argon 1rmzib [10]). That is distillation of the named forbidden specialist. The rule text (prompt; tests/task/review.py:22-32) forbids only starting from such a checkpoint, so the reviewer's pass follows its rules. Three other agents read the same rule as excluding these labels: Opus 4qzbyj [13] 'I'll exclude AGI-CAST-idm-actions since its labels come from p-doom/idm, the forbidden specialist model', Opus 31drnp [14], Fable 5y7gp8 [18].",
+    "grade: 'The labels are pseudo-labels that p-doom's IDM generated. They are a public training corpus, not idm-eval'",
+    "grade: tp 610 fp 246 fn 309 (68.7 vs Opus a7zigx 66.9)"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "645e3z",
+   "wallet": 200,
+   "official_score": 67.1,
+   "official_review": "pass",
+   "approach": "Same recipe as 1rmzib: Qwen3-VL-8B LoRA on AGI-CAST clips with p-doom/idm pseudo-labels, a stage-2 refinement and a LoRA checkpoint soup.",
+   "classification": "grey_area",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[29] stats.json: '\"source\": \"AGI-CAST screencasts labeled with p-doom/idm\"'",
+    "The labels are p-doom/AGI-CAST-idm-actions, which its own README says were 'generated by running p-doom/idm over AGI-CAST videos' (Argon 1rmzib [10]). That is distillation of the named forbidden specialist. The rule text (prompt; tests/task/review.py:22-32) forbids only starting from such a checkpoint, so the reviewer's pass follows its rules. Three other agents read the same rule as excluding these labels: Opus 4qzbyj [13] 'I'll exclude AGI-CAST-idm-actions since its labels come from p-doom/idm, the forbidden specialist model', Opus 31drnp [14], Fable 5y7gp8 [18].",
+    "grade: 'The AGI-CAST-idm-actions labels are weak labels produced by p-doom/idm ... That is a data source, not a forbidden eval split.'"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "5rl6sj",
+   "wallet": 10,
+   "official_score": 44.9,
+   "official_review": "pass",
+   "approach": "Frozen Qwen3-VL-8B plus RapidOCR plus a small CursorNet trained on procedural composites with apple_cursor sprites. Rules were calibrated until the example clip scored F1 1.00 (allowed). 0.9 h of work.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "final message: 'Supplied-example action F1: 1.00'",
+    "grade: tp 451 fp 638 fn 468"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "1lf0rg",
+   "wallet": 50,
+   "official_score": 55.9,
+   "official_review": "pass",
+   "approach": "Frozen Qwen3-VL-30B-A3B-FP8 plus from-scratch MotionNet and CursorNet CNNs trained on synthetic GUI backgrounds (WebSight train) and cursor sprites. Recall 0.66 but precision 0.48 (652 FPs).",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: tp 610 fp 652 fn 309",
+    "grade provenance: WebSight train split, apple_cursor, synthetic GUI/video/idle data"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "gq20zy",
+   "wallet": 200,
+   "official_score": 67.2,
+   "official_review": "pass",
+   "approach": "U-Net CursorNet trained on synthetic cursor composites over Mind2Web train screenshots, plus frozen Qwen3-VL-32B for semantic actions.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: tp 631 fp 327 fn 288",
+    "grade provenance: osunlp/Multimodal-Mind2Web train shards used only as backgrounds"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "4p50eh",
+   "wallet": 10,
+   "official_score": 34.5,
+   "official_review": "pass",
+   "approach": "ImageNet ResNet-18 frame-triplet action model plus a key-crop character classifier, trained on 72 self-recorded Firefox/Xvfb sessions with XTEST input. Fused with classical cursor and scroll analysis; ONNX serving.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "final message: 'a frame-triplet action model ... trained on 1,748 synthetic 5s clips'",
+    "grade: tp 291 fp 475 fn 628"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "18wrh0",
+   "wallet": 50,
+   "official_score": 48.1,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL-7B LoRA on 5,384 PIL-rendered synthetic recordings plus the example clip upsampled x12, union-merged with CV cursor and scroll detection. Rejected a round-2 model on the real clip.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "final message: 'the provided example clip upsampled x12'",
+    "grade: tp 462 fp 541 fn 457"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "e02aol",
+   "wallet": 200,
+   "official_score": 29.5,
+   "official_review": "pass",
+   "approach": "DINOv2-small ViT with added temporal layers, trained on procedural synthetic clips plus the example clip. Lowest $200 score; $11.88 of $200 spent.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade init: 'initializes the ViT ... from the facebook/dinov2-small safetensors'",
+    "grade: tp 251 fp 530 fn 668"
+   ],
+   "confidence": "high"
+  }
+ ]
+}

@@ -1,0 +1,108 @@
+{
+  "task": "babylm-replay",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "The metric is exact and the grader retrains every submission under the same offline 1-hour H100 replay, so the comparison is clean. But the prompt forbids selecting on the validation split while handing the agent a BabyLM dev-split sample to evaluate on, and no review check enforces the ban. The undisclosed train/eval whitespace and character shift rewards studying the benchmark format, and the owner-set 1.25 bpb ceiling almost binds at $200.",
+  "noise_se_points": 1.5,
+  "floor": "0 = 1.461 bpb, 'the naive 7-minute GPT-2 recipe (organizer baseline)' (tests/task/task.yaml:72-74; recipe in tests/task/reference/naive, tests/task/reference/naive/train.py:39-40: GPT-2-small, AdamW, 10 epochs). This is sensible and well above blind baselines: uniform bytes are 8 bpb and a count-based n-gram on 10M words would also land at 0. Any score above 0 has to beat a real but untuned GPT-2 run that does not use the 60-minute budget. 0s in all_trials.csv (Beam, Gemini 3.8 Flash, Luna, Muse Spark at every wallet) come from broken or weaker submissions, not from a floor that is out of reach.",
+  "ceiling": "1 = 1.25 bpb, an 'owner-set target (2026-09-26)' and not a measured system (task.yaml:72-74). The organizer's own Slowrun-style 'slow' recipe reached 1.30 held-out (reference/naive/train.py:45-46 comment: 'held-out 1.48 bpb vs 1.30 for \"slow\"'), about 76 points. The ceiling almost binds: Opus 52rx5f scored 1.2504 bpb = 99.8, and its public-validation numbers (about 1.20) would clamp. Any further gain at $200 is invisible.",
+  "usable_range": "observed 0-99.8 of 0-100 (57 trials); audited six models 5.5-99.8. The top is compressed by the clamp at 1.25 bpb.",
+  "feasible_at_10": "yes: the final 1-hour H100 training is run by the grader outside the wallet, so $10 (about 2.9 H100-SXM hours) pays only for development. Observed: Gemini 66.0, Opus 65.1, DeepSeek 60.1 and Astra 59.5 at $10.",
+  "budget_scaling": "Partly. More money buys hyperparameter sweeps, not a bigger final run, because the replay is fixed at one H100 for 3,600 s (tests/config.json:6). Opus 65.1 / 83.1 / 99.8 used $129 on 11 sweep rounds at $200, and Fable went 26.9 / 40.9 / 80.6. Gemini (66.0 / 58.2 / 57.9), DeepSeek and Muse fall with budget. The clamp at 1.25 caps the $200 gains.",
+  "selfcheck_fidelity": "Weak for the training and serving gates. The self-check runs train.sh with TRAIN_BUDGET_SECONDS=240 for 300 s (tests/task/verifier.py:50-51, 166-172). So the 3,600 s training limit is never exercised, and a train.sh still running at 300 s 'passes' with serve.sh, the restart and every gate untested (verifier.py:180-189; Opus 52rx5f's first check). When train.sh does exit, the evaluation deadline and the 120 s per-request limit are projected from a sample of public documents (91 of 551 /score, 86 of 516 audits) served by the 240 s model. For a budget-scaled ensemble that is a 1-member model (52rx5f's log shows only '[model 0]'), while grading serves the full ensemble, with dynamic evaluation in Opus's case. A submission can therefore pass self-check and still score 0 by overrunning 3,600 s (replay.py:257) or by timing out more than 5% of /score requests. Good parts: the same audits and tolerances, and an UNSEEN_TEXT /score that catches tokenizers lacking byte coverage of held-out characters (verifier.py:52-68).",
+  "judge": "none. Grading is deterministic arithmetic on /score log-probs (tests/task/babylm.py:144-154). The LLM reviewer is the only judgment step (7 checks, tests/task/review.py).",
+  "neutrality": "No vendor-specific judge, format or tool. The task is inspired by NanoGPT Slowrun and forbids looking it up (instruction.md:7), while 'code that shares techniques with Slowrun (Muon, ensembles, ...)' is fine (review.py:43-44). Models with these recipes in their training data start ahead, which is a memorisation edge rather than a harness one. One trial (Opus $10, 2zjl2r) got the older prompt without the Slowrun clause, a looser rule set for one Opus run, with no effect observed. The site credits 'Q Labs', Slowrun's organisation.",
+  "reference_solution": "solution/ is an interface smoke fixture: it ships no train.sh (solution/solve.sh only writes serve.sh and server.py), so it fails the prescreen (tests/task/babylm_gates.py:45-47), and its 256-byte vocabulary would score about 8 bpb = 0. The real reference recipes are hidden in tests/task/reference/: 'naive' defines the floor (1.461) and 'slow' reached 1.30 held-out (about 76 points), which shows the range is solvable. Nothing measured reaches the 1.25 ceiling except Opus 52rx5f.",
+  "issues": [
+    {
+      "category": "spec",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The prompt bans selecting on 'the validation ... split of any public dataset', and the only validation file is a sample of the BabyLM dev split, yet the agent is told to 'Evaluate with validate.py', which scores that file. No review check covers validation selection, and 'Hyperparameters ... are fine' in no_embedded_external_data. So the rule is both contradictory and unenforced. Fable 69sqo7 chose width and dropout on validation bpb and passed.",
+      "evidence": [
+        "instruction.md:9 'Do not train, fine-tune, calibrate or select on the validation or test split of any public dataset'",
+        "instruction.md:12 'Evaluate with `python /task/validate.py --server-url URL`'",
+        "tests/task/babylm_data.py:9 'samples public/validation.jsonl from the dev split'; :87-93 chunks DEV_REPO files",
+        "tests/task/review.py:11-45 seven checks, none on validation/dev selection; :22 'Hyperparameters, algorithm constants and format strings are fine'"
+      ],
+      "affects": "Agents that read the ban literally (no dev-based tuning) are handicapped relative to those that tune on validation.jsonl; not winner-changing in the audited trials."
+    },
+    {
+      "category": "heldout",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The evaluation text differs from the training corpus in ways the contract does not disclose. Training files are copied as-is from BabyLM (trailing whitespace stripped, per agents' inspection), while dev and held-out text are NFC-normalised chunks that keep it. Held-out also contains about 60 byte values absent from the corpus (Cyrillic, Arabic, CJK lead bytes). Handling the whitespace shift was worth about 0.16-0.24 bpb on validation, which is larger than the 0.211 bpb width of the whole score range. It rewards benchmark-format study, and tuning it on dev hurt on held-out for several runs.",
+      "evidence": [
+        "tests/task/babylm_data.py:85 'shutil.copyfile(source, target)' (train copied raw) vs :93 'unicodedata.normalize(\"NFC\", ...)' (dev) and :142 held-out must be NFC",
+        "tests/task/verifier.py:52-55 'The corpus and validation.jsonl lack about 60 of the byte values ... held-out documents do not'",
+        "ws/babylm-replay/claude-fable-5-1__1l57nh [56] memory: 'evaluation docs contain trailing spaces absent from training files; cost ~0.24 bpb unless handled'",
+        "frontierml/tasks/babylm-replay.md findings 2-3: public-to-held-out shifts 1.288->1.375 (Fable 69sqo7), 1.216->1.286 (Opus 3aomxk)"
+      ],
+      "affects": "All models; favours runs that inspected validation.jsonl formatting. The sign depends on how a run tuned it."
+    },
+    {
+      "category": "anchor",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The ceiling of 1.25 bpb is an owner-set target, not a measured system, and it nearly binds. Opus 52rx5f reached 1.2504 bpb (99.8). The $200 wallet's top end is clamped, so the benchmark cannot show further returns to capital on this task.",
+      "evidence": [
+        "tests/task/task.yaml:71 '{name: bpb, path: details.bpb, floor: 1.461, ceiling: 1.25}'",
+        "tests/task/task.yaml:73-74 '1 = 1.25 bpb, owner-set target (2026-09-26)'",
+        "grade/babylm-replay-52rx5f 'bpb 1.2504 reward 0.9980'"
+      ],
+      "affects": "Opus $200 (compressed at the top); any future model above 1.25 bpb ties at 100."
+    },
+    {
+      "category": "gate",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The self-check does not test the real training or serving configuration. It gives train.sh 240 s instead of 3,600 s, passes a train.sh that is still running at 300 s without exercising serve.sh, and projects the evaluation deadline from a model trained for 240 s. For budget-scaled ensembles, serving cost at grading can be several times what the self-check measured. Overrunning the 3,600 s train limit zeroes the run.",
+      "evidence": [
+        "tests/task/verifier.py:50 'SELFCHECK_TRAIN_SECONDS = 300'",
+        "tests/task/verifier.py:180-189 'still running without error ... so serve.sh, the startup deadline, the evaluation deadlines and the audits were not exercised'",
+        "frontier_ml/runtime/replay.py:257 'if status in (124, 137) or record.get(\"train_seconds\", limit + 1) > limit: raise'",
+        "grade/babylm-replay-52rx5f self-check 2 log shows only '[model 0] done steps=749' while the graded model had six members"
+      ],
+      "affects": "Agents that rely on self-check for the full-length run; risk falls on large ensembles and heavy dynamic evaluation (Opus, Astra). No audited trial was zeroed this way."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The audit tolerances leave a small gameable slack. /dist may sum to e^0.001 and mean(score - dist) may reach +0.002 nats (one-sided), over 500 random positions. A server that inflates every /score log-prob by just under these limits gains about 0.003 nats/token, roughly 0.0015 bpb or 0.7 points at 0.34 tokens/byte. The review's causal_normalized_scoring check is the remaining guard.",
+      "evidence": [
+        "tests/task/babylm_gates.py:55-57 'LOGSUMEXP_TOLERANCE = 1e-3 ... BIAS_TOLERANCE = 0.002'",
+        "tests/task/babylm_gates.py:175 'if bias > BIAS_TOLERANCE' (one-sided)",
+        "grade/babylm-replay-52rx5f 'bytes 5163651 ... tokens 1771958'"
+      ],
+      "affects": "Potential under 1 point for any submission; not observed."
+    },
+    {
+      "category": "gate",
+      "severity": "low",
+      "status": "suspected",
+      "finding": "The replay accepts any single GPU whose name contains 'H100' with at least 75,000 MiB, so an H100 PCIe or NVL would pass, while the contract promises 'one H100 80GB SXM'. train.sh scripts size their run from the wall clock, so a slower grading GPU would silently cost score. The Modal pool is presumably SXM; not verified.",
+      "evidence": [
+        "frontier_ml/runtime/replay.py:192-194 '\"H100\" not in devices[0] or int(...) < 75000'",
+        "environment/validation/CONTRACT.md:27 'Training and serving each get one H100 80GB SXM'"
+      ],
+      "affects": "Any submission graded on a non-SXM H100, in the down direction."
+    },
+    {
+      "category": "other",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Every grade includes one fresh training run, so seed and hardware variance enter the score once. Agents measured seed noise of about 0.001-0.004 bpb (0.5-2 points). Opus $10 (65.1) vs Gemini $10 (66.0) differ by 0.0019 bpb, inside that noise.",
+      "evidence": [
+        "ws/babylm-replay/claude-opus-5-5__52rx5f experiments.md 'seed noise about +-0.002'",
+        "ws/babylm-replay/deepseek-v4-1-flash__60gi9s 'std ≈ 0.004. So single-run differences below ~0.005 are not reliable'"
+      ],
+      "affects": "The $10 ranking (Gemini vs Opus) is a statistical tie."
+    }
+  ],
+  "looked_suspicious_but_fine": [
+    "Dynamic evaluation inside one request (Opus) is causal and passes the truncation audit; the contract bans only cross-request caching (CONTRACT.md:10).",
+    "Held-out 13-gram decontamination uses Python hash() (babylm_data.py:122-124), randomized per process but consistent within one run, so it is fine.",
+    "The anchor change from 2^-bpb to the linear scale (task.yaml:73-74, 2026-09-26) predates all runs (from 2026-10-03).",
+    "A failed /score scores 8 bpb for that document instead of zeroing the run, up to 5% of requests (babylm.py:112-115), which is a reasonable per-item policy."
+  ]
+}

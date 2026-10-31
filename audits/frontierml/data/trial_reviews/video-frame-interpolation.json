@@ -1,0 +1,352 @@
+{
+ "task": "video-frame-interpolation",
+ "task_level": {
+  "spec_issues": [
+   "The held-out set is SNU-FILM-arb (tests/task/pipeline/sources.json: 'primary_benchmark': 'snu-film-arb', 270 intervals, 90 per factor in tests/config.json), i.e. the test lists of a public benchmark built from GoPro test and YouTube footage. The agents are not told; the review rule calls this 'an application of the public validation/test exclusion, not an additional secret rule' (tests/task/review.py:56-58). No trial downloaded SNU-FILM or GoPro test footage (searched all 18 trajectories); three used the GOPRO_Large train split (Gemini 4q3ghq, Astra 4svmql, Astra 35pvsa), which is allowed.",
+   "The 300 s per-request ceiling is enforced in grading (tests/config.json 'request_timeout_seconds': 300; tests/task/verifier.py:63; validate.py:73,86-87) although the contract describes it as 'adjustable debugging limits, not benchmark speed requirements' (task.yaml:79-80). It did not obviously cause any zero here, but it contradicts the stated whole-pass-only rule.",
+   "The zero anchor is a 'permitted-standalone-RAFT-deterministic-synthesis' baseline and the one anchor is GIMM-VFI-R-P, the forbidden specialist (tests/task/calibration.json baseline_id, target_id). Every one of the 17 scored trials built pretrained standalone flow (RAFT, SEA-RAFT, WAFT or GMFlow) + warping + a learned synthesis net, i.e. the baseline plus a trained refiner. That is consistent with the rules, but the score mostly measures how well an agent trains a refiner on top of the baseline's own flow."
+  ],
+  "verifier_issues": [
+   "Each of the six components (LPIPS and FloLPIPS at 4x/8x/16x) is clipped to [0,1] (task.yaml:64-71), so beating GIMM-VFI on one factor cannot offset a shortfall elsewhere and differences near the top (Opus 91.1, Astra 91.2) are compressed. The grade page publishes no per-factor breakdown, only the scalar and hashes.",
+   "The three public intervals all come from one portrait 384x720 phone clip (sequence-0027), unlike the mostly 1280x720 GoPro/YouTube held-out footage. Agents who tuned inference on them were misled: Fable 5xwyxm's chosen config scored LPIPS 0.0185/0.0300/0.0599 on public ([148], at or below the target anchor) but 58.2 on held-out.",
+   "DeepSeek 1sb7so scored 0 with 'TimeoutError: Sequence request exceeded its deadline' after a selfcheck on the same folder projected 136 s of the 2250 s budget. The grader does not report which request or how long it took."
+  ],
+  "noise": "Wallet ordering is noisy: Opus 91.1/86.7/87.8, Astra 85.3/91.2/84.6, Fable 78.5/81.8/58.2, Gemini 66.9/47.1/56.5, Muse 68.8/49.8/55.9, DeepSeek 56.8/0/64.2. Only Opus and Astra are clearly separated from the rest. Between those two the winner flips by wallet with margins of 5.8 ($10), 4.5 ($50) and 3.2 ($200) points; near-identical RAFT+refiner recipes elsewhere swing by 20+ points (Fable $50 81.8 vs $200 58.2), so a re-run could plausibly swap Opus and Astra at any wallet. The Opus-or-Astra pair at the top is robust.",
+  "elicitation": "Astra (Codex) spent far more model budget ($247-276 per trial, 1,068-1,167 steps) and used larger flow stacks (SEA-RAFT, WAFT, DINOv2/v3, Depth Anything). Opus got 91.1 from $8.10 of 4090 time. DeepSeek hit its context limit repeatedly (3-6 context compactions per trial). Gemini trials were '-r2' re-runs and stopped after 2.6-4 h with most of the wallet unspent. The DeepSeek $50 zero is the only outcome plausibly caused by the setup.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "All 18 reviews passed and I found no missed violation (no specialist weights, no SNU-FILM or other test-split use). The one zero (DeepSeek 1sb7so, timeout after a passing selfcheck) is a suspected infrastructure or hidden-gate failure, but that model's other runs score 56.8 and 64.2, far below the $50 winner (Astra 91.2), so no winner changes.",
+  "science_vs_gaming": "No gaming: every trial trained a flow-warping-plus-refinement interpolator from permitted flow models on public training splits, and the reviewer checked provenance carefully (it caught and cleared Fable 1dybjq's speed-test download of a Vimeo test shard). The scores reflect engineering quality: data choice (OpenVid/Mixkit/Vimeo/GoPro train), joint flow fine-tuning and test-time augmentation. Nothing is plausibly novel; the best runs reimplement softmax-splatting refiners close to published designs."
+ },
+ "trials": [
+  {
+   "model": "claude-fable-5-1",
+   "trial": "1dybjq",
+   "wallet": 10,
+   "official_score": 78.5,
+   "official_review": "pass",
+   "approach": "Frozen torchvision RAFT-large flow, softmax splatting and a from-scratch RefineUNet (residual flow, mask, RGB residual) trained in three runs on Vimeo-90K train shards (HF bijinc/vimeo-90k-medium) plus OpenVid-1M windows; selection on held-out OpenVid windows.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'code/train.py loads only train-*.parquet from the Vimeo directory, plus OpenVid windows'",
+    "grade: a Vimeo test shard was downloaded to /root/test.parquet 'as a speed test ( trajectory#19 , trajectory#20 , trajectory#21 ), but no later step refers to that file'. I confirmed: the only later mention of test.parquet is the curl speed output (line ~1708); training globbed train-*"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "4yontc",
+   "wallet": 50,
+   "official_score": 81.8,
+   "official_review": "pass",
+   "approach": "Frozen RAFT-large plus an ensemble of two from-scratch SynthNets (flow warping, learned blend weights and residual), trained on Vimeo-90K train, OpenVid-1M part0 and DAVIS-2017 train.txt sequences only.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'prep_sequences.py filters DAVIS to ImageSets/2017/train.txt' and 'the Vimeo test parquets were only listed, never downloaded'",
+    "Checkpoint selection on public examples and held-out OpenVid windows (logs/experiments.md)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "5xwyxm",
+   "wallet": 200,
+   "official_score": 58.2,
+   "official_review": "pass",
+   "approach": "Frozen RAFT-large plus a from-scratch SynthNet trained on Vimeo-90K train and danjacobellis/vimeo1080p train clips, with perceptual-loss fine-tunes; served with time-budgeted adaptive 8-pass flip/reversal TTA and hierarchical midpoint averaging, both chosen on the three public intervals.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[113] 'Hierarchical averaging (hier=1) came out best of the three variants on the public clips'",
+    "[148] 'I'll go with run 4b alone ... since the public LPIPS scores (0.0185/0.0300/0.0599) beat the 4b+1d ensemble'; those public numbers are at or below the target anchor, yet held-out scored 58.2 vs 81.8 for the $50 run, an example of overfitting inference choices to the 3 public intervals of one clip"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "4u26ky",
+   "wallet": 10,
+   "official_score": 91.1,
+   "official_review": "pass",
+   "approach": "RAFT-large bidirectional flow, softmax splatting and a from-scratch synthesis U-Net trained on ~9.8k OpenVid-1M 17-frame windows (L1 + LPIPS), then joint RAFT fine-tuning at 0.05x LR; 24 RAFT iterations plus temporal-reversal TTA. All on rented 4090s for $8.10.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[152] 'Run 2 (joint RAFT fine-tuning) is already outperforming run 1 at the same step count'",
+    "[256] 'Run 3 final with 24 iterations + reversal is the best result yet (dev 0.625 ...)'",
+    "grade: 'HF searches for Vimeo-90K, GoPro and YouTube-VOS listings ... were only size inspection'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "3rfdhm",
+   "wallet": 50,
+   "official_score": 86.7,
+   "official_review": "pass",
+   "approach": "RAFT-large with only update_block and mask_predictor fine-tuned (L1 anchor to the frozen original), softmax splatting and a from-scratch Synth U-Net trained on 11 OpenVid-1M parts (part 90 held out); served weights are a soup of two of its own EMA checkpoints.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'Only the update_block and mask_predictor are fine-tuned, with an L1 anchor to the frozen original'",
+    "grade: 'The served weights/vfi_synth.pt is a uniform soup of the participant's own B4 and C2 EMA checkpoints'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "160b9h",
+   "wallet": 200,
+   "official_score": 87.8,
+   "official_review": "pass",
+   "approach": "From-scratch VFINet (splatting, occlusion mask, residual CNN) on RAFT-large flow, trained on Mixkit clips (Open-Sora-Plan v1.1.0) and the YouTube-VOS 2019 train tar, final run with joint RAFT fine-tuning.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'The valid and test splits were listed at trajectory#25 but never downloaded'",
+    "grade: 'The final H2 run continues from A_final with joint RAFT fine-tuning, as shown at trajectory#246'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "2y3pbb",
+   "wallet": 10,
+   "official_score": 56.8,
+   "official_review": "pass",
+   "approach": "Frozen RAFT-large flow converted to constant-velocity intermediate flows, backward warping and a from-scratch SynthNet (mask + residual) applied by recursive midpoint synthesis; trained with scheduled sampling on UCF101 trainlist01, DAVIS-2017 train.txt and 150 vimeo2k raw videos.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[3553] reasoning: 'UCF101 train list = official train split ... DAVIS: use only train.txt videos'",
+    "grade: 'A Vimeo90K triplet download was attempted and blocked ... and that data was not used'",
+    "10.6 h of agent time for $5.48"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "1sb7so",
+   "wallet": 50,
+   "official_score": 0.0,
+   "official_review": "pass",
+   "approach": "A from-scratch coarse-to-fine bidirectional correlation-flow model with learned occlusion and a full-resolution synthesis U-Net (no pretrained weights at all), trained on Vimeo-90K train and REDS train_sharp. Grading stopped with 'TimeoutError: Sequence request exceeded its deadline' although all four selfchecks passed, the last on the submitted folder projecting 136 s of the 2250 s budget.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "not_applicable",
+   "infra_issue": "suspected",
+   "evidence": [
+    "grade: 'Scored 0.0 TimeoutError: Sequence request exceeded its deadline'",
+    "selfcheck 4 (7h38m, on the folder submitted at [597]-[598]): '600 frames in 37.9 s ... 136 s of the 2250 s allowed'; per generated frame 0.064-0.133 s",
+    "The error is raised when one request exceeds min(request_timeout_seconds, remaining whole-pass time) (tests/task/validate.py:73,86-87); grading enforces request_timeout_seconds 300 (tests/config.json; verifier.py:63) although the contract calls the 300 s ceiling 'adjustable debugging limits, not benchmark speed requirements' (task.yaml:79-80)",
+    "Held-out is SNU-FILM-arb (tests/task/pipeline/sources.json), mostly 1280x720 GoPro/YouTube frames, ~3x the public pixel count, which the 16x margin covers. A 300 s single request or a 2250 s pass is implausible from the measured speed; cause not determinable (server hang, grading-host stall or an oversized clip). Score would not have changed the $50 winner (DeepSeek's other runs 56.8/64.2 vs Astra 91.2)"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "54k7po",
+   "wallet": 200,
+   "official_score": 64.2,
+   "official_review": "pass",
+   "approach": "Frozen RAFT-large with a from-scratch Refiner U-Net (mask, RGB residual, flow residuals) trained on Vimeo-90K train and Inter4K; UCF101 was downloaded but unused (ucf=0 in every log).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'UCF-101 was downloaded during the session, but every training log shows ucf=0, so it was never used'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "3ng6fk",
+   "wallet": 10,
+   "official_score": 66.9,
+   "official_review": "pass",
+   "approach": "Hybrid of three frozen standalone flow nets (RAFT-large, SEA-RAFT Spring-M, UniMatch/GMFlow) with z-metric softmax splatting and a small VFISynthNet trained on only 171 clips from 15 danjacobellis/vimeo2k videos plus the public examples. Spent $0.90.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'danjacobellis/vimeo2k train split ... 15 videos with sha256 hashes, 171 clips ... plus the provided /task/public validation samples'",
+    "grade: 'A DAVIS train download was killed ( trajectory#235 ). A Sintel training-split download was also killed'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "3x0rnp",
+   "wallet": 50,
+   "official_score": 47.1,
+   "official_review": "pass",
+   "approach": "Frozen SEA-RAFT-M flow with multi-scale softsplat/backwarp and a from-scratch VFIRefinementNet (V1 -> V2 -> V3, shipped as a 0.75/0.25 V2/V3 weight average) trained on vimeo1080p train, GoPro-Raw-Videos robot footage and vimeo-90k-medium train.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'Fanqi-Lin/GoPro-Raw-Videos (robot-manipulation footage ...), not SNU-FILM GoPro test footage'",
+    "Lowest Gemini score; spent $14"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "4q3ghq",
+   "wallet": 200,
+   "official_score": 56.5,
+   "official_review": "pass",
+   "approach": "RAFT-large + SEA-RAFT flows, flow splatting to time t and a from-scratch FlowSynthRefiner with flip TTA, trained in three rounds on the GOPRO_Large train/ sequences plus GoPro-Raw-Videos and flying101/cinematic-slowmotion.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'snah/GOPRO_Large train/ only ... The trajectory confirms test/ was never extracted ( trajectory#186-213 )'",
+    "SNU-FILM is built from GoPro test footage; training on the GoPro train split is allowed (tests/task/review.py:56-60)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "4svmql",
+   "wallet": 10,
+   "official_score": 85.3,
+   "official_review": "pass",
+   "approach": "Ensemble of three task-trained Semantic Fusion synthesis heads over SEA-RAFT-M (fine-tuned on train data), GMFlow and a frozen DINOv3-S encoder from a WAFT flow checkpoint, with LaMa Big-Lama filling low-coverage regions; trained on Vimeo-90K train, GoPro train, DAVIS-2017 train and Adobe240/DVD train lists with val/test excluded.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'GoPro TRAIN directory only ... asserts no test bytes were fetched'",
+    "grade: 'LaMa only fills low-coverage regions; it does not generate the frame wholesale'",
+    "LaMa is a general inpainting model, allowed as a general image model (task.yaml:17-19)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "2t6iiu",
+   "wallet": 50,
+   "official_score": 91.2,
+   "official_review": "pass",
+   "approach": "Two from-scratch refiners (outputs averaged 0.5/0.5) over SEA-RAFT-M and WAFT-a2 DINOv3 flow plus a DINOv2 encoder from Depth-Anything-V2-Small, trained on Vimeo-90K train (test IDs excluded), REDS train, Adobe240 training clips (val/test excluded) and X4K X-TRAIN, with SEA-RAFT flow pseudo-labels between observed frames.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'The pseudo-labels in evidence/prepare_teacher.py are SEA-RAFT optical flow between observed frames, which is a permitted flow teacher'",
+    "grade: 'evidence/prepare_teacher.py asserts that forbidden Adobe and Vimeo IDs are excluded'",
+    "No GoPro download (search only), no SNU-FILM"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "35pvsa",
+   "wallet": 200,
+   "official_score": 84.6,
+   "official_review": "pass",
+   "approach": "Depth Anything V2 depth ordering, task-fine-tuned SEA-RAFT-M and WAFT flows with reflection TTA and confidence-gated flow choice, forward splatting and two ContextRefineNet refiners; trained on Vimeo-90K (toflow train lists), GoPro train, DAVIS-2017 train and Adobe240 train.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'download_gopro.py asserts startswith('train/') ( trajectory#47 )'",
+    "grade: 'IFRNet was an architecture-only experiment with random init'",
+    "Two late selfchecks errored (11h18m, 11h20m) before one passed at 11h22m; ran 11.45 h"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3g2cy7",
+   "wallet": 10,
+   "official_score": 68.8,
+   "official_review": "pass",
+   "approach": "Frozen RAFT-large with forward-backward-consistent warped and splatted candidates fed to an ensemble of two from-scratch UNet refiners with h-flip TTA; trained on DAVIS-2017 train (val sequences deleted), Vimeo-90K train shards and MPI Sintel training/final.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'DAVIS 2017 train, downloaded with curl ... with the val sequences deleted'",
+    "Best Muse run, at the lowest wallet"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "szizzw",
+   "wallet": 50,
+   "official_score": 49.8,
+   "official_review": "pass",
+   "approach": "Frozen RAFT-large plus a from-scratch SynthNet (blend weights and residual, flip TTA) trained on Vimeo-90K triplet train shards and danjacobellis/vimeo1080p train.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'Both were downloaded by snapshot_download with allow_patterns=['data/train-*']'",
+    "Spent $5.40 of $50"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "5etf62",
+   "wallet": 200,
+   "official_score": 55.9,
+   "official_review": "pass",
+   "approach": "Frozen RAFT-large plus a from-scratch SynthNet (base 32, flip TTA) trained in two runs on Vimeo-90K train, DAVIS-2017 train.txt sequences and REDS train_sharp.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'only the 60 DAVIS train sequences were copied ( trajectory#63 )' (source was an HF 'DAVIS-2017-Unsupervised-trainval' copy)",
+    "Spent $31 of $200 in 3.7 h"
+   ],
+   "confidence": "high"
+  }
+ ]
+}

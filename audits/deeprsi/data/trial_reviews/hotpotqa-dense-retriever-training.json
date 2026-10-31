@@ -1,0 +1,227 @@
+{
+  "task": "hotpotqa-dense-retriever-training",
+  "task_level": {
+    "spec_issues": [
+      "The overview and the prompt agree: architecture, tokenizer, mean pooling, cosine ranking and checkpoint initialisation are fixed; training has 900 s and retrieval 600 s; training uses only optifine_public_tests/assets/hotpotqa/train. RETRIEVAL.md adds that '--seed can change between runs'.",
+      "The overview says the grader 'reruns the starter's ... training', yet the private baseline is exactly 0.45675789634239594 in all 10 breakdowns, so it is cached or deterministic. This is harmless, and it removes the denominator noise that affects other tasks.",
+      "The public panel (queries, corpus and gold for 3,072 questions over 60k paragraphs) ships inside the workspace. The prompt forbids training on it ('Use only the questions and corpus in .../train'), and none of the 12 training.py patches reads it. Panel use was limited to evaluation helpers (Fable aJjZCsq dev/, Kimi 8moZreh dev/)."
+    ],
+    "verifier_issues": [
+      "The train corpus overlaps the evaluation corpus. 24,389 of the 60,000 public-panel paragraphs, and 2,292 of the 5,922 gold paragraphs (~39%), also appear in the 200k train corpus (Fable 9pA8cjv [15], [87]; Fable aJjZCsq [13]-[14]). Unsupervised pretraining on the train corpus (ICT/crop: Fable, GPT) therefore partly memorises evaluation documents. Fable notes its link pretraining 'only works because ... 39% of gold docs overlap'. The rules allow this, and the private panel is likely built the same way. Even so, the absolute nDCG overstates generalisation to an unseen corpus and favours corpus-pretraining recipes.",
+      "The private panel is the same distribution as the public one but a different set. The private baseline is 0.4568 vs 0.4473 public. Every trial's private nDCG lies within -0.001 to +0.016 of its final public nDCG (e.g. Fable 0.7328->0.7394, Argon 0.6627->0.6624, Kimi 0.585->0.6005).",
+      "Three trials have no breakdown (both GPT-6 Astra trials and Gemini Flash PhEvjxs). PhEvjxs was scored 0.338 despite an ArtifactCollectionError; that implies nDCG of about 0.611, matching its public 0.6126."
+    ],
+    "noise": "Run-to-run noise is about +/-0.003 nDCG, roughly +/-0.007 reward (Fable seeds 0.7300-0.7334; Argon repeats 0.6617-0.6630), and the baseline is fixed. Gaps between models are at least 0.03 nDCG: Fable 0.739/0.734 > GPT 0.722/0.708 > Argon 0.662/0.652 > Grok 0.629/0.627 > Kimi 0.617/0.601 > Flash 0.611/0.570. The order is robust, except that Flash PhEvjxs (0.611) slightly overlaps Kimi cMLMUiT (0.601).",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "The baseline is fixed, noise is far below the gaps between models, the private set is distinct, and no trial broke the data rule. The train/eval corpus overlap inflates absolute scores but does not change the winner (Fable, with both attempts top).",
+    "science_vs_gaming": "No gaming was found. Every gain comes from known dense-retrieval techniques: model-mined hard negatives, cross-GPU in-batch negatives, longer schedules, corpus pretraining (ICT/crop), cross-encoder or ensemble distillation, and weight averaging. The main separator is spending most of the 15-minute budget on unsupervised corpus pretraining (Fable ~0.73, GPT ~0.71-0.72 vs ~0.60-0.66 for the others). Fable adds two transferable data-construction ideas, multi-positive composite queries from random paragraph pairs and idf^2 keyword queries, with ablations. Part of the corpus-pretraining benefit comes from the train/eval corpus overlap."
+  },
+  "trials": [
+    {
+      "model": "claude-fable-5.1",
+      "trial": "9pA8cjv",
+      "official_reward": 0.6187693360811986,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Wall-clock-budgeted two-stage recipe. Stage 1 (~760 s) is ICT-style pseudo-query contrastive pretraining over the 200k train paragraphs: random spans (half cut out of the paragraph), titles, keyword queries sampled by idf^2, and 30% 'two-paragraph' queries that concatenate pieces of two random paragraphs, with both as positives, to mimic two-support questions. Stage 2 (56 s) is supervised fine-tuning with hard negatives re-mined from the full corpus by the current model. Public 0.7328 (seed 1729) / 0.7334 (seed 7); private 0.7394.",
+      "classification": "research",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff RECIPE.md ablation table: starter 0.447 -> +mined negatives 0.566 -> +ICT pretraining 0.644 -> full budget 0.686 -> keyword queries 0.707 -> ... -> random two-paragraph pairs 0.732",
+        "RECIPE.md: the two-paragraph queries 'mimic multi-hop and comparison questions ... gave the single largest late gain (+1.2 points)'; the keyword queries 'teach the model to weight rare terms like a lexical retriever, which was the main gap to BM25 on bridge questions'",
+        "[15] the agent measures corpus overlap: '24,389 of the 60K eval docs overlap with the train corpus text-wise, though that doesn't matter since eval labels are off-limits'; [87] link pretraining 'only works because ... roughly 39% of gold docs overlap with the train corpus (2292/5922)'",
+        "--exclude_ids holds out train dev ids during development only (default None in the final run). The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point.",
+        "summary.json rewards: ndcg_at10 0.7394 vs baseline 0.4568"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "claude-fable-5.1",
+      "trial": "aJjZCsq",
+      "official_reward": 0.6078373943198156,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Crop pretraining for 85% of the budget on the 200k train paragraphs. 30% of queries are a span pointing to its paragraph; 70% are the title of paragraph A plus a span of an unrelated paragraph B, with both positive. Then supervised fine-tuning with TF-IDF distractors and model-mined hard negatives, run four times and weight-averaged. torch.compile with manual gradient averaging gives more steps. Public 0.7318/0.7300/0.7303 over three seeds; private 0.7344.",
+      "classification": "research",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff NOTES.md: '70% of the queries: the *title* of paragraph A + a random 4-24 token span of an unrelated paragraph B ... This mirrors two-support questions and was the largest single gain after the pretraining itself.'",
+        "[13]-[14] 'no overlap in question IDs between train and panel, but there's meaningful corpus overlap—about 24,389 of 60,000 panel paragraphs and 2,292 of 5,922 gold texts also appear in the training corpus'",
+        "dev/analyze.py and dev/evaluate.py in the patch read public_panel/gold.jsonl for evaluation only. The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point.",
+        "summary.json: ndcg_at10 0.7344"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "PhEvjxs",
+      "official_reward": 0.33845783280775654,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Changes only the loss and the negatives: a non-competing multi-positive softplus ranking loss with a cosine margin and power scaling, cross-GPU all-gather of candidates (4,352 per step), and two rounds of GPU-vectorised hard-negative mining that excludes context documents. Public 0.6126 vs 0.4473.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "Final step [2731]: 'Official Paired Benchmark NDCG@10: 0.61264 vs Starter Baseline: 0.44731'; 'Non-Competing Multi-Positive Softplus Ranking Loss ... Cross-GPU Distributed Candidate Gathering ... Online Hard Negative Mining'",
+        "summary.json exception ArtifactCollectionError, yet the trial was scored 0.338. That implies private nDCG of about 0.611, consistent with its public 0.6126, so the exception looks like infrastructure, not the submission.",
+        "No reward breakdown (rewards={}). The private nDCG is inferred as (1+reward) x 0.45676, using the fixed private baseline seen in the other 10 trials."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "rJ6pCLZ",
+      "official_reward": 0.24678821237602566,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Longer schedule (2,600 steps), cross-GPU in-batch negatives and two scheduled rounds of corpus-wide hard-negative mining. Public 0.5669; private 0.5695.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py: '--steps default=2600', 'mining_1_start' / 'mining_2_start' stages, torch.distributed.nn all-gather",
+        "summary.json: ndcg_at10 0.5695. It scored despite exception AgentContinuationStalledError.",
+        "The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "4b65pXr",
+      "official_reward": 0.4501218656506083,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "A staged recipe with a training-time reparameterised embedding table: IDF-gated deltas, a learned projection and scale (IDFEmbeddingWrapper), exported as a plain BertModel state dict. Mined hard negatives, cross-encoder teachers and distillation, and soups. Public 0.6627; private 0.6624.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py class IDFEmbeddingWrapper: compute_weight() = w0*scale + w0@proj + bias, idf scaling, gated deltas. The export saves base_bert.state_dict(), so the architecture stays unchanged at inference (the rule allows weight changes only).",
+        "Final public runs 0.6617-0.6630 (last steps). Private 0.6624 matches, so run-to-run noise is about +/-0.001.",
+        "The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "j9GZ5Ey",
+      "official_reward": 0.427035720753264,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Ten training branches with mined negatives and different temperatures and hop weights, averaged into a soup. The concatenated branch embeddings of train queries and documents are then PCA-projected to 128-d and distilled into one BERT-Tiny (a 'procrustes' stage). Public 0.6532; private 0.6518.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py: '--num_branches 10', branch_d_vecs/branch_q_vecs from encode_all_tokens(doc_tokens ...) on the train corpus, then 'gram = (d_cat.T @ d_cat) + pca_q_weight * (q_cat.T @ q_cat)' and a procrustes_steps distillation loop",
+        "Last public runs 0.6530-0.6535; private 0.6518.",
+        "The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "UP8vb7Q",
+      "official_reward": 0.5503534049882461,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Corpus-only crop/ICT warm-up on the train paragraphs, including title pairs, then question contrastive training with re-mined (ANCE-style) negatives under a wall-clock controller with torch.compile. Late public runs 0.700-0.704; private about 0.708.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py docstring: 'All examples, including the corpus-only warmup and mined negatives, are derived from the two JSONL files in --train_dir. No other model or training data is used.'",
+        "Public 'C': 0.7031 at [1903]",
+        "No reward breakdown (rewards={}). The private nDCG is inferred as (1+reward) x 0.45676, using the fixed private baseline seen in the other 10 trials."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "X9nMioc",
+      "official_reward": 0.5811092508068252,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Corpus learning on train paragraphs, then 'graph adaptation' on title-mention links inside the train corpus, a short supervised teacher, an in-run cross-encoder teacher, and distillation into a student reset to its question-free corpus/graph prefix. Public 0.7128; private about 0.722.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py docstring: 'Corpus learning is followed by optional graph adaptation, a short supervised teacher initializer, an in-run cross-encoder teacher, and student distillation ... Every model and weak label is regenerated from the supplied inputs.'",
+        "Public 'C': 0.7128 at [1492]",
+        "No reward breakdown (rewards={}). The private nDCG is inferred as (1+reward) x 0.45676, using the fixed private baseline seen in the other 10 trials."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "2Kkt2pC",
+      "official_reward": 0.3721514383094038,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Two seeds train in parallel, one per GPU, and are averaged. Stage 1 is in-batch contrastive training with lexical hard negatives and span/title ICT. Stage 2 distils a frozen token-maxsim scorer into the mean-pooled cosine model. Short refinement passes follow (title margins, bridge questions, a topical-word pass). Public about 0.62; private 0.6267.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py docstring: 'stage 2 (distill frozen token-maxsim into the mean-pooled cosine used at inference). A held-out slice of hard training questions picks the checkpoint.'",
+        "The 'topical words (firm, event, publisher)' appear only in a docstring. refine_topical builds bags from train tokens, and no panel-derived word list is hard-coded.",
+        "The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "ztGi4di",
+      "official_reward": 0.3775875174429051,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "A teacher ensemble (two contrastive members, a complementary member and a BM25-distilled lexical model) mines 'topic lookalike' negatives. Two phrase-match members train against those and are weight-averaged with the lexical model. Public 0.628; private 0.6292.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py docstring: 'A teacher ensemble ... mines topic lookalikes ... The lexical member distills BM25 rankings ... Initialization is the packaged BERT-tiny checkpoint.'",
+        "Public 0.6278 at [1191]",
+        "The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "8moZreh",
+      "official_reward": 0.3514560313751409,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Multi-positive InfoNCE at t=0.02 plus a doc->query term, with hard negatives re-mined every 300 steps under a false-negative margin filter. EMA and a top-3 soup are selected on a held-out train split. Two cross-encoder teachers are followed by MarginMSE distillation. Public about 0.610; private 0.6173.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py docstring (three-stage recipe; held-out split of 768 train questions for selection)",
+        "dev/evaluate.py in the patch reads public_panel for evaluation only",
+        "The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "cMLMUiT",
+      "official_reward": 0.3147871933129063,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Soup of contrastive members with EMA self-distillation, then a student distilled from the soup teacher with teacher-mined extra documents. Public 0.585; private 0.6005.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch.diff training.py constants: MEMBER_STEPS=2000, STUDENT_STEPS=2600, SELF_KD=0.1, DISTILL_ALPHA=0.15, 'validated on held-out hard questions from the training split'",
+        "The training.py patch reads data only through --train_dir (questions.jsonl, corpus.jsonl). public_panel files are opened only by dev/evaluation helpers, never by the training entry point."
+      ],
+      "confidence": "high"
+    }
+  ]
+}

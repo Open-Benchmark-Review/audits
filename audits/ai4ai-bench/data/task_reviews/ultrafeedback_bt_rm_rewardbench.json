@@ -1,0 +1,541 @@
+{
+ "task": "ultrafeedback_bt_rm_rewardbench",
+ "task_level": {
+  "rubric_code": "FN",
+  "confirmed": true,
+  "counted_toward_threshold": true,
+  "hidden_data_integrity": [
+   "The official score is computed on all 2,985 RewardBench pairs, including the 512 proxy pairs the agent sees, with labels, for the full 4 h. score = score_final (final_eval.py:337-341), and the reward written is score_final (final_eval.py:365). The 2,473-row held-out score is only a diagnostic (final_eval.py:342-344, 214-245). The paper's 'held-out' wording applies to the diagnostic, not to the reported number. The instruction discloses the overlap (instruction.md:23).",
+   "Measured effect is small where the case pages report it: opus/medium full 77.09 vs held-out 76.95; luna/max full 74.36 vs held-out 74.05, so at most about +0.3 points (sigma <= +0.011). Agents choose seeds and configurations on the proxy, so this is a one-directional optimistic bias.",
+   "The phase mounts hold. Explore gets only the 512-row proxy (declaration.py:55-77), retrain gets no RewardBench at all (declaration.py:79-94), and full RewardBench is mounted only in score (declaration.py:142-151; assets.lock.yaml:125-126). network_mode = no-network (task.toml:32).",
+   "The overlap gate exists and is enforced. final_eval.verify_disjoint (final_eval.py:149-211) is called before scoring (final_eval.py:260) and raises on any overlap (final_eval.py:204-210). It matches prompts and responses exactly after NFKC, whitespace and casefold normalisation (final_eval.py:130,175-194; build rule in assets.lock.yaml:68-72). All case pages report zero overlap.",
+   "UNCONFIRMED: paraphrase or near-duplicate overlap between UltraFeedback and RewardBench (AlpacaEval, MT-Bench, LLMBar, XSTest and HEP prompts are public and widely reused) is not checked by the exact-match gate. It cannot be tested without the data.",
+   "The gate checks the mounted pool file, not the rows a candidate actually trains on. Smuggling proxy rows into formal training would need a patch that gets past orchestrator/task.py:931-1001 (16-row data cap) and runner.py:185-229. Not observed in any case."
+  ],
+  "scorer_issues": [
+   "No metric-gaming route found. A tie scores 0.5 (grade.py:170). Aggregation is RewardBench v1's four-section mean with math-prm upweighted (grade.py:18-51, 226-250). The reward model must emit exactly one scalar per sequence (grade.py:154-158).",
+   "Measurement noise is far larger than the margins the leaderboard ranks on. The published stderr (about 0.78-0.97) is a descriptive per-subset binomial (grade.py:366-396,419), not seed variance. Exact replays of the unchanged shipped recipe in the case pages scored 73.951, 66.306 and 65.412 (sol/low, seeds 42/7/1729) and 73.835 (sol/xhigh, seed 42). That is a seed spread of about 8.5 points, against a sigma scale of 0.036 per point above baseline. The instruction itself warns RewardBench is seed-sensitive (instruction.md:27,31).",
+   "The selection rule (task.toml:19; instruction.md:17) takes the best of up to 3 checkpoints on the final set. Several agents published 3 independent seeds as their 3 checkpoints (sol low, medium, max; sonnet max; kimi), so the reported score is max-of-3-seeds chosen on the test rows, while the reference is a single run."
+  ],
+  "anchor_issues": [
+   "The paper baseline of 74.9 (scripts/score.py:21) does not match the task's own shipped reference of 74.568936 (instruction.md:37), which every case page also uses ('shipped_recipe 74.569'). It sits above every observed replay of the shipped recipe (73.835-73.951 at seed 42; 65.4-66.3 at other seeds), so the reference fails against itself.",
+   "Effect: with b = 74.569, sigma rises for 28 of 29 cells (sonnet/xhigh stays at 0); task mean 0.0973 -> 0.1016, and sonnet/max (74.889) flips from below to above baseline. '21 of 29 below baseline' becomes 20 of 29.",
+   "u = 50 (chance pairwise accuracy with ties = 0.5) and o = 100 are sensible. sigma = 1 needs 100% RewardBench accuracy, which no model reaches (label noise), so it cannot be reached without solving the task."
+  ],
+  "noise": "n = 2,985 pairs per checkpoint, with descriptive SE about 0.8. Seed variance of the shipped recipe dominates: unchanged-recipe replays span 65.4-74.0, against the 74.569 reference and the 74.9 anchor. Only opus/medium (77.09, a 10-member weight average) is more than 2 SE above the anchor. The other 7 above-anchor cells sit +0.27 to +0.94 above it, inside 1.2 SE and far inside seed spread. Seed-42-matched comparisons (75.2-75.8 vs 73.8-73.95) suggest the schedule and truncation changes may give a modest real gain, but single runs cannot separate this. Gaps between most configurations, and the beat/miss label, are inside the noise.",
+  "checkpoint_selection": "The best checkpoint is not the last one in 24 of 29 cells. Task mean sigma is 0.0973 under best-of-3 vs 0.0875 under the last checkpoint (+0.010, about 11%). Against the 74.9 anchor, beat/miss flips in 2 cells (opus/max 75.75 -> 74.879; sol/none 75.168 -> 74.639); below-baseline count 21 -> 23 under last checkpoint. Large best-vs-last gaps (about 8.5 points: sonnet/max, sol/low, sol/medium, sol/max) are seed lotteries scored on the final set.",
+  "evidence": [
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/harness/final_eval.py:1-6 (headline is the official score on all 2985 pairs)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/harness/final_eval.py:337-341,365 (score and reward = score_final over all 2,985 rows)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/harness/final_eval.py:214-245 (proxy / held-out split is a diagnostic)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/harness/final_eval.py:149-211,260 (zero-overlap gate, exact canonical match, enforced before scoring)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/harness/grade.py:93-96,319-344 (512-row stratified proxy is a subset of the final)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/harness/grade.py:366-396,419 (stderr is descriptive, not seed variance)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/declaration.py:9-12,55-77,79-94,142-151 (phase mounts)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/instruction.md:23 (proxy is a visible subset of the 2,985-pair final), :27,:31 (seed-sensitive), :37 (shipped 74.568936)",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/task.toml:19,32,45-47,59",
+   "/home/einsia/ai4ai-bench/tasks/ultrafeedback_bt_rm_rewardbench/environment/assets.lock.yaml:68-78,125-126,141-154",
+   "/home/einsia/ai4ai-bench/orchestrator/task.py:931-1001; orchestrator/runner.py:185-229 (patch data gate)",
+   "audits/ai4ai-bench/scripts/score.py:21 (paper anchors 74.9/50/100)",
+   "case pages codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-sol__low (unchanged-recipe seeds 73.951/66.306/65.412) and __gpt-5.6-sol__xhigh (seed-42 endpoint 73.835)"
+  ],
+  "summary": "BTRM can be beaten (8/29 cells above the anchor; opus/medium +2.2 with a 10-member LoRA soup), but beat/miss and most rankings are decided by noise. The paper anchor of 74.9 sits above the task's own shipped reference (74.569) and above every observed replay of the shipped recipe, whose seed spread is about 8.5 points, so the reference fails against itself (FN direction; rubric 'noise larger than the pass margin'). Two optimistic biases act the other way: best-of-3 checkpoints (often 3 independent seeds) chosen on the final set, and the 512 visible proxy rows included in the official score (confirmed in code; measured effect <= +0.3 points). The overlap gate exists and is enforced, but only by exact match; near-duplicate contamination is UNCONFIRMED. No reward hacking. '21 of 29 below baseline' mostly reflects anchor placement and seed variance, not agents being unable to beat the recipe."
+ },
+ "cells": [
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 71.948,
+   "approach": "Independent 128-step LoRA+head Bradley-Terry members (1,024-token truncation, 8x8 batching, seeds 1001+). It exports the last member, the average of the last two, and the average of all members. Labels and loss are unchanged.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'Labels and Bradley-Terry updates are unchanged; this is hyperparameter, schedule, randomness, export, and checkpoint-policy work'",
+    "checkpoints 71.948/71.326/70.743 (SE ~0.79), all below the 74.569 shipped reference",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 71.636,
+   "approach": "Holds out 512 training pairs for validation. Repeated fresh-seed cycles of BT plus 0.001*(r_c+r_r)^2 centering with length grouping. Publishes validation-ranked endpoints and an exact 4-member LoRA average built by rank concatenation.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Evidence supports a valid 71.635607 run, not causal benefit, superior soup, or baseline improvement'",
+    "case page: 'knowingly retained a misranking selector'",
+    "benchmark audit: Agree: the case page marks Protocol exposure Confirmed because the visible proxy rows are included in the official full score, which matches final_eval.py:337-341."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 75.75,
+   "approach": "Four rank-64 LoRA members, each one pass over the data in a different order, stacked into one rank-256 adapter that equals their average (a WARM-style weight average). The BT update is unchanged and training is wall-clock bounded.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 75.750/75.687/74.879; best is the earliest (5120)",
+    "best-of-3 decides beat/miss here: the last checkpoint, 74.879, is below the paper anchor of 74.9",
+    "+0.85 over the anchor is about 1 descriptive SE (0.82) and far inside the shipped recipe's seed spread (65.4-74.6)",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 77.093,
+   "approach": "Equal soup of the ten most recent LoRA members, cycled over five duration/LR recipes and several seeds. LoRA factors are concatenated so the average is exact without building full models. Also 1,024-token truncation and gradient checkpointing. Labels and loss are unchanged.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page table: ten-member soup 77.0928+/-0.8246, proxy 77.7092 / held-out 76.9529",
+    "only BTRM cell more than 2 SE above the anchor; averaging ten members also damps single-seed noise",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 64.351,
+   "approach": "Pair-weighted (length-balanced) BT members at alternating 2e-5/1e-5 learning rates. The members are averaged exactly and the soup is exported at delta scales 0.8/1.0/1.2. It extrapolated from 2 selected one-epoch members to 14 mostly two-epoch members, and the result regressed.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 56.207/59.819/64.351",
+    "case page: 'extrapolated two selected one-epoch members to 14 unfiltered, mostly two-epoch members while underusing budget'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 74.535,
+   "approach": "Changes only the learning-rate schedule and stopping: 384-step cosine restarts with peak scaled by 0.8^k, wall-clock stop, and a save every 384 steps. Otherwise the shipped recipe, so effectively a baseline replay.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'The candidate changes only learning-rate timing, wall-clock stopping, and checkpoint policy'",
+    "74.535 vs shipped 74.569: a replay that lands on the reference",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Unknown): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 69.266,
+   "approach": "Microbatch 4 with accumulation 16, then repeated fresh-seed 128-update runs on all pairs. The last three published are kept, with no selection metric.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'hyperparameter, schedule, engineering, and checkpoint-policy tuning-not a new algorithm'",
+    "seed spread across its checkpoints 63.8-69.3",
+    "benchmark audit: Agree: the case page marks Protocol exposure Confirmed because the visible proxy rows are included in the official full score, which matches final_eval.py:337-341."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 74.889,
+   "approach": "Salted-hash 7,782/410 internal split. Repeated fresh-seed runs of the 252-step shipped recipe, keeping a run only if it improves internal holdout accuracy. The official best is the first trial (progress 252); later trials fell to 65.35.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "best 74.889: above the task's own shipped reference of 74.569 (instruction.md:37, case page) but below the paper anchor of 74.9 (scripts/score.py:21), so sigma is 0.09996 instead of 0.111",
+    "case page: 'evidence supports one valid, slightly higher numerical draw, not a robust method improvement'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 71.49,
+   "approach": "Fixed 7,680/512 split and repeated fresh-seed shipped-recipe runs, publishing the strict best by internal holdout accuracy. All three retained payloads are duplicates (identical 71.49).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 71.49/71.49/71.49 (duplicate payloads)",
+    "case page: 'submitted with about 64 minutes 49 seconds unused and without validating its central selector'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 38.325,
+   "approach": "Merges each member's LoRA into the backbone, then averages full models elementwise, including independently initialised scalar heads. The result is below chance (38.3 < 50) and sigma is 0.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 37.363/36.961/38.325, below the 50 uninformative anchor",
+    "case page: 'every full-model parameter, including independently initialized heads, enters a GPU-resident elementwise running mean'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__ultrafeedback_bt_rm_rewardbench__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 74.121,
+   "approach": "2,048-token length-grouped batches; five centre seeds plus LR, two-epoch and full-model hedges. Proxy ranking was intended, but the proxy is not mounted in formal replay, so it falls back to launch order.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 74.121/65.624/71.806",
+    "case page: 'cannot establish stable improvement, full-fine-tuning benefit, or the outcome of a compliant long recipe'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 73.975,
+   "approach": "BT loss with a temperature-scaled logit, a 4,096-step schedule and saves every 512 steps, from one favourable exploration seed.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'the central limitation was choosing a favorable seed and extrapolating at most 252 steps to a 4,096-step cosine schedule'",
+    "best 73.975",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": 74.495,
+   "approach": "LoRA dropout set to 0 (a regularisation hyperparameter), seed 42, plus schedule and checkpoint-policy changes. Effectively the shipped recipe.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'the submission changed a regularization hyperparameter, schedule, and checkpoint policy-not the training signal or update rule'",
+    "74.495, within 0.1 of the shipped 74.569",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 74.362,
+   "approach": "BT temperature 1.0 to 2.0, 4,096 requested steps and saves every 256 steps. Data, sampling and capacity are unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: full 74.362 vs 'held-out 74.0471' for the same artifact, i.e. the visible proxy rows add about +0.3 to the official score",
+    "case page: 'visible proxy is included in the official full-final score'",
+    "benchmark audit: Agree: the case page marks Protocol exposure Confirmed because the visible proxy rows are included in the official full score, which matches final_eval.py:337-341."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 75.837,
+   "approach": "Schedule and checkpoint change only (a long cosine run to about 3,283 steps). Data, sampling, loss, seed 42 and LR 5e-6 are unchanged.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'Data, sampling, loss, seed 42, learning rate 5x10^-6, and update rule remain unchanged'",
+    "75.837: +0.94 over the anchor (about 1.1 SE), and about +1.9 over the seed-42 shipped replays (73.835/73.951 in the sol xhigh and sol low cells), so a modest schedule gain is plausible",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": 75.339,
+   "approach": "Schedule only: 252 to 720 steps, 4 to 24 warmup steps, saves every 240. Seed 42 and everything else unchanged.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'The candidate only changes hyperparameters and scheduling: 252->720 total steps, 4->24 warmup steps'",
+    "75.339: +0.44 over the anchor, inside 1 SE",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 75.431,
+   "approach": "2,048-token truncation, 2x32 microbatching at global batch 64, and a 1e6-step cosine horizon, which keeps LR near 5e-6 throughout. Wall-clock stop.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'The million-step cosine horizon also kept learning rate near 5e-6 throughout actual replay'",
+    "75.431: +0.53 over the anchor, inside 1 SE",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 73.987,
+   "approach": "1,024-token truncation, 8/8 batching and fused AdamW. Seeds 42 and 43 run 252 steps each, then seed 44 runs a long low-rate branch that overfit (69.25). The best is the seed-42 252-step branch.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 73.987/72.056/69.252",
+    "case page: 'the untested long branch overfit'",
+    "benchmark audit: Agree: the case page marks Protocol exposure Confirmed because the visible proxy rows are included in the official full score, which matches final_eval.py:337-341."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 73.951,
+   "approach": "Three independent seeds (42, 7, 1729) of the unchanged shipped recipe, published as checkpoints 252/504/756. These are exact baseline replays, and the official result is the best of three seeds on the final set.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'keeps that signal, data, objective, optimizer, architecture, hyperparameters, and 252-step branch length unchanged'",
+    "replays scored 73.951/66.306/65.412: the shipped recipe re-run lands 0.6-9.5 points below the 74.9 anchor (seed spread about 8.5 points)",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 73.885,
+   "approach": "A 252-step seed-42 anchor (only ordering and batching changed), a hedge with 5% reverse-label smoothing, and further seeds ranked by training loss.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 73.885/71.633/65.297",
+    "case page: 'a poor seed-17 replication exposed large Reasoning variance'",
+    "benchmark audit: Agree: the case page marks Protocol exposure Confirmed because the visible proxy rows are included in the official full score, which matches final_eval.py:337-341."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 73.686,
+   "approach": "21 screening runs on a 7,168/1,024 split rank seeds by holdout loss. Seed 42 plus selected seeds 73 and 809 are then retrained on all data for 252 steps, with 1,024-token truncation and grouped sampling.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 73.686/71.042/65.158",
+    "case page: 'left seed sensitivity and selection unresolved'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 75.168,
+   "approach": "1,024-token truncation, 4/16 batching at global batch 64, 4,096 requested steps and saves every 64. Seed 42, loss and LR unchanged.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 75.168/74.838/74.639; best is the earliest",
+    "best-of-3 decides beat/miss here: the last checkpoint, 74.639, is below the 74.9 anchor",
+    "case page: 'Evidence supports one clean numerical win, not a new algorithm or robust improvement'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Unknown): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 73.843,
+   "approach": "Full-data seed-42 fallback (an exact shipped replay, 73.835), ten internal-holdout-selected seeds retrained on all data, and a within-seed average of steps 126 and 252 (73.843, the official best).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'checkpoint 1000, seed-42 endpoint, scored 73.835'",
+    "case page: 'rank-256 averaging doubled adapter parameters for a 0.009-point nominal edge'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": 75.416,
+   "approach": "1,024-token truncation, a 1,536-step schedule and 512-step saves. The run stopped before half the budget.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'the evidence cannot establish that 1,024 caused the gain ... or that results generalize across seeds'",
+    "75.416: +0.52 over the anchor, inside 1 SE",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Unknown): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": 72.919,
+   "approach": "1,024-token truncation, 4,096 requested steps (20+ epochs) and saves every 512. Seed 42.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 72.919/72.586/72.798",
+    "case page: 'combined truncation with an untested twenty-plus-epoch schedule'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 66.934,
+   "approach": "Hash-holds out 410 pairs; seeds 42-56 each train 189 updates on 7,782 pairs and are ranked by validation loss. All three retained models regressed.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 66.934/64.273/64.076, SE missing on the case page",
+    "the case page contradicts itself: 'no official final score can be claimed' vs 'missing-receipt wording is superseded by the canonical frozen result record'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 74.085,
+   "approach": "Schedule only: 252 to 3,000 requested steps, saves every 250.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "checkpoints 74.018/74.085/74.054",
+    "case page: 'leave no evidence that its schedule improved the baseline'",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": 75.21,
+   "approach": "Schedule and checkpoint policy only (2,016 steps, seed 42), with no completed exploration experiment.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'performed no completed scientific experiment ... The evidence supports valid artifacts and a slightly higher one-run point estimate'",
+    "75.21: +0.31 over the anchor, inside 0.4 SE",
+    "benchmark audit: Disagree with the case page's Protocol exposure field (Clean): the 512 visible proxy pairs, with labels, are 17.2% of the 2,985 rows that make up the official score (final_eval.py:337-341,365). That is benchmark-level exposure for every BTRM cell, and 6 BTRM case pages already mark it Confirmed. Conduct fields agree."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__ultrafeedback_bt_rm_rewardbench__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 70.89,
+   "approach": "Full-parameter fine-tuning in place of LoRA, plus schedule changes and saves at 1536/3072/4608.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "checkpoints 70.890/70.821/70.716",
+    "case page: 'trainable scope, schedule, guards, and checkpoint policy change'",
+    "benchmark audit: Agree: the case page marks Protocol exposure Confirmed because the visible proxy rows are included in the official full score, which matches final_eval.py:337-341."
+   ],
+   "confidence": "high"
+  }
+ ]
+}

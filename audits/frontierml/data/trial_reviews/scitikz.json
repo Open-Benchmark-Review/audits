@@ -1,0 +1,362 @@
+{
+ "task": "scitikz",
+ "task_level": {
+  "spec_issues": [
+   "The held-out set is SciTikZ-Bench (611 figures, tests/data.json -> inductionlabs/frontier-ml-tasks scitikz/private). The prompt and CONTRACT.md forbid any use of it; no trial downloaded it, a mirror, or the benchmark repo/HF tasks dataset (searched all 18 trajectories for inductionlabs/frontier-ml-tasks/frontierml.org: no hits).",
+   "The 50 public examples are SciTikZ-230K rows, explicitly allowed for training and selection (SCHEMA.md; tests/task/review.py:29-35). Trials differed (most excluded them by hash; DeepSeek 48h210 and Astra 3sl4he/5jvzxw trained on them); both are legal and the reviewer treated them consistently.",
+   "Render-and-compare selection is allowed by the review rule ('Model-driven rendering, refinement and selection are allowed', tests/task/review.py:41-42) but is not mentioned in the prompt. The top compile rates come from servers that compile candidates in-process with a bundled TeX Live or Tectonic (Fable 4pf2v7 99.8%, Fable 4mfvjr 99.5%, Astra 3dkpma 98.9%). Fable 4pf2v7 reranks with SigLIP SO400M, which is also one of the seven scoring metrics.",
+   "'Unmodified off-the-shelf weights alone fail' (tests/task/review.py:9-10) is stricter than the prompt's wording but consistent with 'Train a vision-language model'; no trial was affected."
+  ],
+  "verifier_issues": [
+   "The score is the raw metric x 100 with no floor: compilation rate x geometric mean of SigLIP, CLIP, exp(-LPIPS/0.5), SSIM, 1-DreamSim, exp(-TED/0.4) and CrystalBLEU (scitikz_metric.py aggregate()). Several components saturate near 0.8-0.9 for any plausible render, so zero-shot Qwen3-VL already scores about 0.2-0.4 on the dev set ([64] in Opus 1rlvur: 0.407) and the 18 trials span only 39.6-65.1.",
+   "Overlap between the training corpus and the benchmark was checked only for the 50 dev rows and only for exact matches: scitikz_data.py:95-96 'Exact overlap only, not semantic/template deduplication or pretraining contamination detection'. SciTikZ-230K and SciTikZ-Bench come from the same pipeline, so template-level near-duplicates in the 230k training rows may reward training on more of the corpus (Opus 3mquyr trained on all of it). Not measurable from public data.",
+   "The grade page shows only the compile count and the scalar; the seven component means are not published, so it is impossible to tell whether reranking against SigLIP or SSIM moved scores beyond compile rate."
+  ],
+  "noise": "Within-model wallet order is mostly flat: Fable 54.5/54.0/56.5, Gemini 51.4/53.9/52.9, Muse 41.4/44.4/43.0, Astra 52.9/57.0/59.1, Opus 56.4/57.0/65.1, DeepSeek 40.7/39.6/51.1. Run-to-run noise is visible in the agents' own measurements: Opus 3mquyr scored the same checkpoint with greedy decoding four times on the 50 dev figures and got 0.629, 0.656, 0.655 and 0.617 ([226]). On 611 figures the spread should be roughly 1-2 points. The $50 winner (Astra 3sl4he 0.57026 vs Opus 1rlvur 0.57009) is decided by 0.0002 raw and would flip under any plausible re-run. The $10 margin (Opus 56.4 vs Fable 54.5) is within noise; only the $200 Opus win (65.1 vs Astra 59.1) is clearly real.",
+  "elicitation": "All six harnesses ran normally. Astra (Codex) used the most steps (596-1265) and the most model spend ($109-249) but no multi-agent or imagegen tools. Astra 3sl4he burned three of four selfchecks on startup failures and passed only at 10h49m (startup 215 s of 300 s). DeepSeek's 10bzdt trial failed two selfchecks on the 2-hour gate before it wrote a chunked decoder. Gemini runs were the re-run '-r2' versions. None of these changed a winner.",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "All 18 trials passed review, I found no violation the reviewer missed and no infrastructure zero, so no scoring defect changes a winner. The $50 winner is a statistical tie (Astra 0.57026 vs Opus 0.57009), but that is noise, not a defect.",
+  "science_vs_gaming": "Almost all of the score is ordinary engineering: fine-tune a Qwen VLM on as much of the allowed SciTikZ-230K corpus as the wallet buys, then add serve-time compile checks, repair and candidate selection. There is no gaming of the rules. The one grader-aware choice is reranking against a metric model (Fable 4pf2v7's SigLIP reranker), which the review rule permits. The biggest single gain was Opus 3mquyr's choice of a newer base (Qwen3.5-9B) with full-corpus full-parameter SFT. No trial produced a transferable research idea."
+ },
+ "trials": [
+  {
+   "model": "claude-fable-5-1",
+   "trial": "4pf2v7",
+   "wallet": 10,
+   "official_score": 54.5,
+   "official_review": "pass",
+   "approach": "LoRA (r64) SFT of Qwen3-VL-8B-Instruct on a category-balanced 15k-row subset of SciTikZ-230K (about 8.3k seen) on one rented H100, then a server that samples several candidates, compiles them with a bundled TeX Live and reranks by SigLIP similarity between the render and the input image. Compile rate 99.8%.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[82] 'I'll add best-of-N candidate selection with a SigLIP visual reranker to the server'",
+    "grade: 'Candidates are compiled with pdflatex and reranked by SigLIP image similarity'; render-and-compare selection is explicitly allowed by tests/task/review.py:41-42 ('Model-driven rendering, refinement and selection are allowed')",
+    "SigLIP SO400M is also one of the seven scoring metrics, so the reranker optimises a grader component directly; legitimate test-time compute, not a rule break",
+    "compiled 610/611"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "4av1k7",
+   "wallet": 50,
+   "official_score": 54.0,
+   "official_review": "pass",
+   "approach": "Two-phase LoRA SFT of Qwen3-VL-8B-Instruct on SciTikZ-230K (phase 2 on fresh rows, under-represented biology/chemistry/earth-space oversampled 3x), merged and served greedily through vLLM 0.11 with a deterministic LaTeX repair proxy (xcolor clashes, loop collapse, preamble).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[93]/[126] phase-2 weights chosen on the 50 dev figures: 'Phase 2 shows slightly better code similarity and far fewer degenerate loops'",
+    "grade: 'the 50 public dev examples are excluded by code hash'",
+    "compiled 587/611"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "4mfvjr",
+   "wallet": 200,
+   "official_score": 56.5,
+   "official_review": "pass",
+   "approach": "Full SFT of Qwen3-VL-8B (ViT frozen) in two runs over ~230k SciTikZ-230K rows on 2xH100; server generates greedy + 3 samples, compiles each against bundled TeX Live 2023 and 2021 builds, and ranks compiled candidates by rendered SSIM/L1/aspect similarity to the input.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[107] 'Dual-TeX verification hit 0.514 on dev with a 0.96 compile rate'",
+    "[178] 'Run 2 outperforms run 1 (0.556 vs 0.541 on dev), so it's now the submission'",
+    "compiled 608/611 (99.5%)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "15ip8u",
+   "wallet": 10,
+   "official_score": 56.4,
+   "official_review": "pass",
+   "approach": "Full SFT of Qwen3-VL-4B-Instruct on 100k SciTikZ-230K rows (500 steps, one H100, 65 min); server samples 1 greedy + 8 candidates and picks by n-gram MBR consensus, then applies generic TeX repairs (library/colour preloading, closing environments).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[82] '100,542 train + 242 holdout'; [45] '59 dev-duplicate rows excluded'",
+    "[175] 'N=8 through the full serve.sh path: dev score 0.593, compile 92%'",
+    "grade: 'src/mbr.py picks one candidate by n-gram consensus'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "1rlvur",
+   "wallet": 50,
+   "official_score": 57.0,
+   "official_review": "pass",
+   "approach": "Two-phase LoRA (r128) SFT of Qwen3-VL-8B-Instruct on 60k then 30k SciTikZ-230K rows with replay; server samples greedy + 7, lints, and picks by n-gram MBR (bonus for greedy), plus package/colour repair.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[64] zero-shot baseline 0.407 on dev",
+    "[247] 'Going from 8 to 12 samples gives no gain (0.5552 vs 0.5553), so 8 samples is final'",
+    "Raw 0.5701 vs Astra 3sl4he 0.5703: the $50 win is decided by 0.0002"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "3mquyr",
+   "wallet": 200,
+   "official_score": 65.1,
+   "official_review": "pass",
+   "approach": "Full-parameter SFT of Qwen3.5-9B (ViT frozen, merger trainable) for one epoch over all ~230k SciTikZ-230K rows on 8xH100, a second 140k-row pass, and a uniform weight soup of the two finals; greedy decoding through vLLM with fence extraction and closing repairs. The decisive choice was the newer Qwen3.5-9B base trained on the whole corpus.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[188] 'Training finished: 1 epoch over 230K samples in 102 min'",
+    "[226] pass-2 final 4 greedy dev runs '0.629, 0.656, 0.655, 0.617' (shows ~4-point run-to-run spread on 50 dev figures)",
+    "grade: 'prepare_data.py removes the 50 public dev examples'",
+    "No sampling/reranking at serve time; compile rate only 94.1% but best geomean"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "10bzdt",
+   "wallet": 10,
+   "official_score": 40.7,
+   "official_review": "pass",
+   "approach": "LoRA (r32) of Qwen2.5-VL-3B-Instruct on 26k SciTikZ-230K rows trained on a rented RTX 4090/3090 for 2.6 h; transformers server with a hand-written chunked decoder and an incremental no-repeat-ngram processor to fit the 2-hour gate, plus deterministic TeX repairs.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[242] 'Training DONE: 1652 steps, 26,429 samples (exactly one epoch)'",
+    "[211]/[283] two selfchecks failed the speed gate (projected 7215 s vs 7200 s) before the chunked engine",
+    "compiled 482/611 (78.9%)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "55e3nh",
+   "wallet": 50,
+   "official_score": 39.6,
+   "official_review": "pass",
+   "approach": "Two-stage LoRA (r32) of Qwen2.5-VL-7B-Instruct on ~20k + 11k SciTikZ-230K rows; vLLM server with a pdfLaTeX check-and-repair loop that re-prompts the model with the compile log.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[477] 'stage 1 actually used 19,854 rows ... because of the 1000-per-figure-type cap'",
+    "grade: 'model repair attempts are re-prompted with the compile log'",
+    "compiled 454/611 (74.3%), lowest of the 18"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "48h210",
+   "wallet": 200,
+   "official_score": 51.1,
+   "official_review": "pass",
+   "approach": "LoRA (r64) of Qwen2.5-VL-7B-Instruct, 2600 steps over the full 230k corpus (512-row self-made holdout; the 50 dev figures included in training, which SCHEMA.md allows); greedy transformers decoding stopping at \\end{document} with text repairs.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[136] 'Data prep is complete: 230,910 rows, 230,398 train, 512 holdout'",
+    "[366] holdout 'Compile rate 0.938 (480/512)'",
+    "grade: 'The 50 public dev examples ... are included in training; this is allowed'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5zheb6",
+   "wallet": 10,
+   "official_score": 51.4,
+   "official_review": "pass",
+   "approach": "LoRA SFT of Qwen3-VL-8B-Instruct for 206 steps on 6.6k SciTikZ-230K rows; greedy vLLM decoding with up to 3 sampled retries when output is invalid, plus regex validator/repair.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'a LoRA SFT run of 206 steps on 6600 examples'",
+    "grade: 'prepare_data.py actively removes items that overlap the public validation examples (63 code/body overlaps)'",
+    "Spent $6.40 in 1.9 h"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "hl9i9f",
+   "wallet": 50,
+   "official_score": 53.9,
+   "official_review": "pass",
+   "approach": "LoRA (r64, completion-only) of Qwen3-VL-8B on 23k stratified SciTikZ-230K rows, checkpoint soup chosen on the 50 dev figures; deterministic decoding with sampled retry on unhealthy output and regex repair/resizebox wrapping.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'writes 23,170 rows. train_sft.py trains LoRA (r=64, alpha=128)'",
+    "grade: 'The policy permits using those 50 examples for checkpoint and soup selection, which is what logs/validation_summary.json records'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "14s4sq",
+   "wallet": 200,
+   "official_score": 52.9,
+   "official_review": "pass",
+   "approach": "LoRA SFT of Qwen3-VL-8B on 25.6k category-balanced SciTikZ-230K rows, soup + merge; greedy then temperature-0.35/0.6 retries and regex heal_tex repair. Used $84 but not more data than the $50 run.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'records 62 overlap rows excluded and 25,568 balanced training rows'",
+    "Only 1 selfcheck used; score below the $50 trial (53.9)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "5jvzxw",
+   "wallet": 10,
+   "official_score": 52.9,
+   "official_review": "pass",
+   "approach": "LoRA (r16) of Qwen3-VL-8B-Instruct, 7452 + 284 steps on SciTikZ-230K plus the 50 dev pairs; vLLM greedy with stop at \\end{document}, a compact-prompt retry on truncation, and one model-driven repair pass after an offline Tectonic compile failure.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'checks the source with an offline Tectonic compile and, on failure, runs one repair pass with the same model and image'",
+    "selfcheck 1 failed startup (not healthy in 300 s), then 3 passes"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "3sl4he",
+   "wallet": 50,
+   "official_score": 57.0,
+   "official_review": "pass",
+   "approach": "LoRA (r32) of Qwen3-VL-8B, 2250 + 6200 steps on SciTikZ-230K plus the 50 dev pairs; greedy vLLM with dependency injection and model repair using Tectonic diagnostics. Won $50 by 0.0002 raw over Opus 1rlvur.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'phase1 ran for 2250 steps, then phase2 for 6200 steps, and checkpoint phase2-6200 was selected'",
+    "selfchecks 1-2 failed startup, 3 failed first-request timeout, 4 passed at 10h49m with startup 215 s of 300 s",
+    "Raw 0.57026 vs Opus 1rlvur 0.57009"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "3dkpma",
+   "wallet": 200,
+   "official_score": 59.1,
+   "official_review": "pass",
+   "approach": "Four-stage LoRA on Qwen3-VL-8B covering 199k filtered unique documents (later stages add vision-tower LoRA and trainable projectors with category-balanced sampling) on 8xH100; bounded greedy decoding with loop-triggered regeneration and Tectonic-gated regeneration from the image, plus colour/library declarations.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[53] 'The two training stages cover 199,302 unique documents after filtering'",
+    "[227] 'The bounded retry run compiled 44/50 figures and scored 0.511'",
+    "[261] model-repair variant dropped: 'reduced the result to 39/50 compilation'",
+    "compiled 604/611 (98.9%)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "1oa5d3",
+   "wallet": 10,
+   "official_score": 41.4,
+   "official_review": "pass",
+   "approach": "LoRA (r64) of Qwen3-VL-8B-Instruct, 1 epoch / 1000 steps on a 16k SciTikZ-230K subset; plain vLLM server with fence extraction and document closing, no compile loop.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: '16000 rows loaded, 1000 steps, train_loss 0.3387, DONE'",
+    "compiled 468/611 (76.6%): no compile check or repair, which explains most of the gap"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3vxe0t",
+   "wallet": 50,
+   "official_score": 44.4,
+   "official_review": "pass",
+   "approach": "LoRA (r64) of Qwen2.5-VL-7B-Instruct on 14k SciTikZ-230K rows (875 steps), 400-row holdout for selection; plain vLLM OpenAI server.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'the run finishing at 875/875 steps with a merged output'",
+    "compiled 507/611 (83.0%)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "2rejat",
+   "wallet": 200,
+   "official_score": 43.0,
+   "official_review": "pass",
+   "approach": "Full SFT of Qwen3-VL-4B-Instruct (vision frozen) on 42k then 16k SciTikZ-230K rows; vLLM behind a proxy that only caps tokens and closes fences.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "grade: 'train_main.log (42096 rows, 2631 steps) and train_phase2.log (15962 rows, 998 steps)'",
+    "compiled 471/611 (77.1%); spent $31.65 of $200"
+   ],
+   "confidence": "high"
+  }
+ ]
+}

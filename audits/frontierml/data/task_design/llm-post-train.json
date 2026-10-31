@@ -1,0 +1,106 @@
+{
+  "task": "llm-post-train",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "Anchors are measured under the task's own settings, the grader is deterministic apart from temperature-0.7 sampling and the MATH judge, and the self-check exercises the real concurrency and timeout. But the graded GPQA and LCB files ship to the agent as 'development' data while selection on them is banned with no threshold, and the review applied that rule inconsistently. Weight provenance against the ceiling model rests on the reviewer alone. No audited winner changes.",
+  "noise_se_points": 3.2,
+  "floor": "The untouched Qwen3-4B-Base under the task's settings (vLLM 0.11.0, its own template, 16,384 tokens, T=0.7): MATH-500 0.622, LCB 0.200, MMLU-Pro 0.3607. GPQA is set to chance 0.25 because the base scored 0.1414, below chance (tests/task/task.yaml:56-69). This is sensible as a 'no post-training' anchor. It is not a no-effort anchor, though: the base fails GPQA mostly by rambling without the ANSWER marker (33/198 cut off, task.yaml:67-69), and serving 'the base unchanged ... behind a system prompt or chat template' is explicitly allowed (tests/task/review.py:14-16), so prompt engineering alone earns points.",
+  "ceiling": "Qwen/Qwen3-4B-Instruct-2507 (non-thinking) under the same settings: GPQA 0.596, MATH-500 0.956, LCB 0.490, MMLU-Pro 0.699 (task.yaml:69-71). It is not binding: the best trial (Opus 562x1w) reaches 52 / 83 / 58 / 78 normalized, 67.4 overall. Caveat: it was measured with an 1,800 s timeout, not 250 s ('changes nothing: the slowest request ... took 170 s', task.yaml:62-63). That holds for a non-thinking model but not for the long-reasoning distills every agent built.",
+  "usable_range": "observed 0-67.4 of 0-100 (57 trials); audited six 0-67.4, with 4 zeros from review fails, no weights or format collapse.",
+  "feasible_at_10": "yes: SFT of a 4B model on public R1/QwQ-style traces fits in about 2.9 H100-SXM hours. Observed: Opus 57.6, Astra 51.6, Sonnet 49.2 at $10.",
+  "budget_scaling": "Weak. Best of the audited six 57.6 / 55.2 / 67.4; Opus 57.6 / 43.3 / 67.4, Astra 51.6 / 48.3 / 67.2, Gemini 0 / 55.2 / 58.1. Most $50-vs-$10 differences are within about 1.5 SE of a difference (about 4.5 points). Grading's ~3,150 generations and the judge calls are free but do not train anything.",
+  "selfcheck_fidelity": "Good for the gates. The self-check runs the exact checkpoint-layout audit grading applies (tests/task/verifier.py:36-62). It sends one GPQA request read by the scorers' parser, then one wave of 32 concurrent public requests (16 GPQA, 16 hard LCB) at 16,384 tokens, T=0.7 and the 250 s timeout (frontier_ml/scoring/language.py:879-981), which is grading's request pattern. Gaps: MATH-500 and MMLU-Pro prompts and formats are not exercised; the review (pinned_base_start, no_public_benchmark_eval_training) does not run; and quality is not scored. A submission can pass and still score 0 through the review (Fable 67hhap, Muse 2wj08u) or a below-floor component (Fable 3jm1su MMLU-Pro 0.088).",
+  "judge": "MATH-500 only: gpt-6-luna (OpenAI) judges final-answer equivalence against the reference. It reads the last 12,000 characters of each reply, with JSON mode, seed 0, reasoning_effort medium and default temperature 1, which the model forces (frontier_ml/scoring/reasoning_benchmarks.py:31-45). The grading is reference-based with low vendor-bias risk and some nondeterminism. The ceiling and floor were judged by the same model (task.yaml:65). The decisive judgments are the LLM reviewer's (Claude Opus 5.5, model name visible) on provenance and benchmark selection.",
+  "neutrality": "The base model, prompts and formats are vendor-neutral, and distillation from any model, including the ceiling model, is allowed (tests/task/review.py:12-14). Two harness-level effects: Gemini's $10 trial stalled after 34 Gemini API 429 errors and was never re-run (an infrastructure zero tied to one vendor's harness); and the selection rule was enforced unevenly (Fable 67hhap and Muse 2wj08u failed; Fable 2ikiw0, Gemini s6ff3k and DeepSeek 671pbq, unreviewed, did similar tuning and kept their scores). The site credits PostTrainBench, which the prompt does not name; models that know its setup may know the recipes, a mild memorisation edge.",
+  "reference_solution": "solution/ is an interface smoke fixture ('returns empty spans/answers and cannot pass architecture gates', solution/README.md). It has no output/model/, so it fails the checkpoint audit (tests/task/verifier.py:29-30) and scores 0. Solvability is shown by the ceiling model (heavily post-trained by Qwen, not within any wallet) and by agents (67.4 at $200).",
+  "issues": [
+    {
+      "category": "heldout",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "Half the score comes from the graded sets that ship to the agent. /task/public/benchmarks holds all 198 GPQA-Diamond rows and the full LCB v6 files, which are the sets the grader reads from /tests/private (config.json:7-12). validate.py tells the agent it scores them 'the way the final evaluation does', while the contract says 'evaluation only' and bans selection. Diagnosis and selection are separated only by the reviewer's judgment.",
+      "evidence": [
+        "environment/validation/CONTRACT.md:3 'The examples in /task/public/benchmarks/ are for evaluation only.'",
+        "environment/validation/validate.py:2 'Score your server on the development benchmarks the way the final evaluation does.'",
+        "frontier_ml/scoring/language.py:712 SELFCHECK_PUBLIC = ('benchmarks/gpqa_diamond.csv', 'benchmarks/livecodebench-v6/test6.jsonl')",
+        "tests/task/task.yaml:70 ceiling 'GPQA 118/198' (the full public set)"
+      ],
+      "affects": "All models: it rewards iterating on the graded GPQA/LCB as long as the trajectory reads as 'evaluation'. Opus 5w16aj re-ran all 198 GPQA items to confirm a format fix ([143]-[186]) and passed."
+    },
+    {
+      "category": "spec",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The selection ban has no threshold and was applied inconsistently. review.py forbids 'checkpoint or prompt selection' on test splits. The reviewer failed Fable 67hhap (budget compared on GPQA/LCB) and Muse 2wj08u (chat template picked on 24 GPQA items). It passed Fable 2ikiw0 (budget forcing judged on GPQA 20%->42%) and Gemini s6ff3k (budget caps set on 32 GPQA + 32 LCB). DeepSeek 671pbq (final phase picked partly on a 16-item GPQA probe) was never reviewed. The rule cannot be checked consistently as written.",
+      "evidence": [
+        "tests/task/review.py:25-31 'Task-time training, fine-tuning, distillation, calibration and checkpoint or prompt selection must not use any public benchmark test or validation split'",
+        "frontierml/tasks/llm-post-train.md finding 1 (Fable 2ikiw0 [136], Gemini s6ff3k [354]/[362], DeepSeek 671pbq [377])"
+      ],
+      "affects": "Fable $200 and Muse $10 zeroed; Fable $50, Gemini $200 and DeepSeek $10 kept scores for similar tuning. No winner changes."
+    },
+    {
+      "category": "gate",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "The stated 16,384-token budget cannot be reached under the 250 s per-request timeout at 32 concurrent requests on one H100. Agents measured about 1,400-1,500 tok/s aggregate (about 45-70 tok/s per stream), so a full 16k reply would take about 370 s. The effective reasoning budget is therefore set by hardware throughput, and every competitive run had to build wall-clock length control. The anchors were measured at an 1,800 s timeout on two data-parallel H100 replicas (half the per-GPU load a submission gets), and the non-thinking ceiling model never came near either limit. The contract states both numbers, but not that they conflict, and the timeout is not retried.",
+      "evidence": [
+        "tests/config.json:16-18 'max_tokens': 16384, 'temperature': 0.7, 'request_timeout_seconds': 250",
+        "tests/task/task.yaml:64 'two data-parallel replicas on this host's H100s'",
+        "tests/task/task.yaml:62-63 'measured with an 1,800 s request timeout before the task's was set to 250 s, which changes nothing: the slowest request in either run took 170 s'",
+        "ws/llm-post-train/claude-opus-5-5__562x1w [59] '~1,400 tok/s aggregate, meaning a 16k-token response would take ~370s and exceed the 250s limit'",
+        "ws/llm-post-train/claude-opus-5-5__3hexms [113] 'the 250s time limit (not token budget) cutting off about a third of GPQA requests early'"
+      ],
+      "affects": "Long-reasoning distills (all models) lose items in the down direction; runs that invested in serving-side length control and FP8 KV cache gain. Grading-GPU throughput variance moves items near 250 s."
+    },
+    {
+      "category": "other",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "Provenance against the ceiling model rests on the LLM reviewer alone. The checkpoint audit checks only tensor names, shapes and dtypes, which Qwen3-4B-Instruct-2507 and Thinking-2507 share exactly. The weight-update comparison against those siblings was dropped on 2026-10-01 'as brittle, in favour of the reviewer'. Copying the ceiling model's weights into output/model/ would score about 100 unless the reviewer catches it in the trajectory. No audited trial did this.",
+      "evidence": [
+        "tests/task/checkpoint_audit.py:8-14 'Whether these weights were actually trained from the pinned base, rather than copied ... is for the trusted LLM review ... the operator dropped it on 2026-10-01 as brittle'",
+        "tests/task/review.py:18-20 'it cannot tell the base from a post-trained sibling, so establish the weights' origin from the trajectory'"
+      ],
+      "affects": "Integrity risk for every model; it depends on the reviewer seeing every download and copy (for example on spin machines)."
+    },
+    {
+      "category": "feasibility",
+      "severity": "low",
+      "status": "suspected",
+      "finding": "Gemini $10 (sa323x) is an infrastructure zero: the trajectory stops at step 200, 62 minutes in, after 34 Gemini API 429 quota errors, and the trial was not re-run (unlike Gemini's other trials). The benchmark has no rule for harness-side API outages.",
+      "evidence": [
+        "frontierml/tasks/llm-post-train.md finding 3",
+        "frontierml/data/all_trials.csv 'llm-post-train-sa323x ... 0,fail,0,12,0'"
+      ],
+      "affects": "Gemini $10, down; it would need more than 57.6 to change the winner."
+    },
+    {
+      "category": "metric",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Noise: one temperature-0.7 sample per item, and the normalised ranges are narrow (GPQA 0.346, MATH 0.334, LCB 0.290, MMLU-Pro 0.339 raw). GPQA alone gives about 10 normalised points of SE on its component, and the mean about 3.2 points (about 4.5 for a difference of two runs). The $200 result (Opus 67.4 vs Astra 67.2) is a tie, and $10 (Opus 57.6 vs Astra 51.6) is about 1.3 SE. The anchors are single samples too (GPQA ceiling ±0.035 raw).",
+      "evidence": [
+        "tests/task/task.yaml:56-59 floors/ceilings",
+        "tests/config.json:17 'temperature': 0.7",
+        "scratchpad/td_babylm_diffusion_posttrain/se.py"
+      ],
+      "affects": "Wallet winners at $10 and $200 are not statistically separated."
+    },
+    {
+      "category": "anchor",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The floor mixes measured and chance values. GPQA uses chance because the base scored below it, while MMLU-Pro's floor (0.361) is the base answering with a bare letter. Some points are therefore buyable by output-format fixes alone, which the review explicitly allows ('Submitting the base unchanged, or serving it behind a system prompt or chat template, is permitted').",
+      "evidence": [
+        "tests/task/task.yaml:66-69 'GPQA 28/198 = 0.1414 (below chance, so the floor is chance, 1/4) ... The base answers MMLU-Pro with a bare letter'",
+        "tests/task/review.py:14-16"
+      ],
+      "affects": "All models equally; inflates the low end slightly."
+    }
+  ],
+  "looked_suspicious_but_fine": [
+    "The worst case of ~3,150 requests / 32 concurrent x 250 s is about 24,600 s, under the 28,800 s inference_timeout (tests/config.json:3), so there is no hidden deadline truncation.",
+    "A timed-out request is not retried and scores wrong per item (scoring/language.py:427-431); this is disclosed in CONTRACT.md:12.",
+    "Distilling from Qwen3-4B-Instruct/Thinking (the ceiling family) is allowed for data generation (review.py:12-14); it is a stated design choice applied to everyone.",
+    "The anchors were measured 2026-10-01 under the exact v6 suite, before the runs (2026-10-03 onward)."
+  ]
+}

@@ -1,0 +1,521 @@
+{
+ "task": "opd_math_1p5b",
+ "task_level": {
+  "rubric_code": "MINOR",
+  "confirmed": true,
+  "counted_toward_threshold": false,
+  "hidden_data_integrity": [
+   "AIME inputs are never mounted before scoring. Explore mounts student, teacher, train.parquet and MATH-500 only (declaration.py:21-43; comment at :32-34). Retrain mounts student, teacher, train.parquet and the patch (declaration.py:50-64). Only SCORE mounts data/aime and the verifier (declaration.py:111-117). The image copies only JustRL's grade.py and utils.py, no question data (environment/Dockerfile:91-96), and the build refuses any /opt/**/aime* (environment/check_image.py:132-135). /opt/harness/final_eval.py is readable (instruction.md:25 allows it) and exposes only source revisions and file hashes (final_eval.py:95-100), not questions or answers. Case pages report literal searches of all 60 final problems against each trajectory with zero hits.",
+   "Training data is decontaminated against the final set. train.parquet is DAPO-Math-17k (1,791,700 rows deduplicated to 16,395) with canonical, containment and shared 8-gram overlap against the pinned AIME24/25 removed, plus an 80-row holdout, leaving 15,285 rows (environment/assets.lock.yaml:115-142; tools/asset_builders/build_opd_zero_overlap.py:24,175). 8-gram filtering will not catch paraphrases, but no evidence of residual overlap was found.",
+   "The proxy does not leak. MATH-500 (JustRL test.parquet, assets.lock.yaml:168-178) comes from the MATH test set, which predates AIME 2024/2025, so the proxy and final cannot share items.",
+   "network_mode holds. task.toml:32 sets no-network; retrain and score run with --network=none (orchestrator/container.py:216-230). Explore egress is an allowlisting proxy, and case pages record blocked GitHub/NVIDIA/ChatGPT requests that returned no data.",
+   "Memorisation risk exists but does not differ between cells. The final is a public benchmark: 60 problems, answers widely published. AIME 2024 (Feb 2024) predates the fixed student DeepSeek-R1-Distill-Qwen-1.5B (Jan 2025) and the RL teacher JustRL-DeepSeek-1.5B; AIME 2025 postdates the student. The shipped components (AIME24 0.4958 vs AIME25 0.3583, instruction.md:38-39) fit easier or partly memorised 2024 items, though difficulty also differs. Every cell starts from the same student and teacher with the same data, so this shifts the absolute level, not the comparisons. UNCONFIRMED as a score driver."
+  ],
+  "scorer_issues": [
+   "The proxy does not match the instruction. instruction.md:23 and task.toml:66 say both metrics use the 'rule grader with verifier fallback', but fast_eval grades with grade_rows, which is rule-only (fast_eval.py:30,223; grade.py:55-63). Only the final runs CompassVerifier on rule-rejected rows (final_eval.py:432-469). This affects proxy comparability only. Case pages for Sol none, Sol xhigh and Terra high flag the same defect.",
+   "LLM-judge fallback. CompassVerifier-3B judges every rule-rejected sample, about 1,100 of 1,920 per checkpoint (Terra max page: '1,108, 1,088, and 1,111 verifier fallbacks'). It is called with question='' (final_eval.py:412) on the full, untruncated response of up to 31,744 tokens, at temperature 0 (final_eval.py:406-424). The repo reports no agreement rate with ground truth or per-run count of verifier-accepted rows. The judge is from a different model family than the student, and no cell showed judge gaming. Logged as a caveat.",
+   "The final evaluator otherwise matches the instruction: 60 questions x 32 samples, T=0.7, top_p=0.9, 31,744-token cap, fixed sample seeds from Random(42) (final_eval.py:102-111,524), and a question-clustered SE (grade.py:89-111). Nothing can be reward-hacked through the checkpoint."
+  ],
+  "anchor_issues": [
+   "The paper baseline 0.436 does not match the task's own shipped-recipe replay. instruction.md:36 and every case page give 820/1920 = 0.4271, with fixed start 0.2521 (instruction.md:35). Under 0.436, 5 of 25 scored cells beat the baseline; under the documented 0.4271, 14 do. All of these margins are inside noise.",
+   "An optimum of 1.0 (perfect AIME for a 1.5B model) is far above anything reachable. The best observed sigma is 0.121, and scored cells span sigma 0.090-0.121. OPD therefore adds about 0.1 per scored cell whatever the method. Cells without a valid patch get sigma=0, which is about 0.1 below any patch equivalent to the shipped recipe."
+  ],
+  "noise": "The final has 60 questions; the question-clustered SE is about 0.052 per checkpoint (case pages: 0.0487-0.0539). The paired SE between two checkpoints is smaller, but the observed spread between near-identical weights is still about 0.005-0.016. Examples: Sonnet 5 high step 1650 vs 1651 gives 0.4109 vs 0.4266; Opus 5 medium 2200 vs 2201 gives 0.4323 vs 0.4276; Terra max 1800 vs 1808 gives 0.4349 vs 0.4219. 23 of the 25 scored cells lie in 0.418-0.449. The best cell is +0.022 over the documented shipped replay (0.4271) and +0.013 over the paper baseline, comparable to the one-step checkpoint jitter. No configuration can be distinguished from the shipped recipe or from each other, except Opus 5 max (0.392) and Kimi K3 max (0.405), which are lower but still within about 0.7 SE. The OPD ranking of configurations is noise.",
+  "checkpoint_selection": "orchestrator/final_score.py:148 takes the max on the final metric. In 16 of 25 scored cells the reported checkpoint is not the last. Best minus last ranges from 0.001 to 0.020 in raw score (mean task sigma 0.0859 vs 0.0841 for the last checkpoint). Against the paper baseline 0.436, best-of-3 flips 4 cells from miss to beat (Opus 5 xhigh, Luna medium, Sol low, Terra medium). Each flip is a draw of evaluation noise on the test set and moves sigma by 0.012 or less.",
+  "evidence": [
+   "tasks/opd_math_1p5b/declaration.py:21-43 explore mounts (no AIME); :50-64 retrain mounts; :111-117 score mounts data/aime + verifier",
+   "tasks/opd_math_1p5b/environment/Dockerfile:91-96 only JustRL grade.py/utils.py copied; environment/check_image.py:132-135 refuses baked AIME",
+   "tasks/opd_math_1p5b/environment/assets.lock.yaml:115-142 zero-overlap derivation; tools/asset_builders/build_opd_zero_overlap.py:24,175 8-gram filter",
+   "tasks/opd_math_1p5b/harness/grade.py:55-63 grade_rows is rule-only (used by fast_eval.py:223)",
+   "tasks/opd_math_1p5b/harness/final_eval.py:432-469 rule then CompassVerifier fallback; :412 question=''; :102-111 protocol constants; :524 seeds",
+   "tasks/opd_math_1p5b/task.toml:66 and instruction.md:23 claim verifier fallback for both metrics",
+   "tasks/opd_math_1p5b/instruction.md:35-36 fixed start 0.252083 and shipped 0.427083 (paper anchor 0.436, scripts/score.py:20)",
+   "orchestrator/final_score.py:16,148 best-of-3 on the final metric",
+   "cases.json: 25 scored cells, best 0.3922-0.4490; 4 empty-patch cells (Luna low, Terra high/low/none) without a score"
+  ],
+  "summary": "OPD's hidden-data boundary is sound: AIME is mounted only at scoring, training data is 8-gram-decontaminated, MATH-500 cannot overlap AIME 2024/25, and there is no network. The task's problem is resolution. With 60 public questions, the SE is about 0.052 and one-step checkpoint jitter is about 0.016. Every scored configuration (0.392-0.449) is statistically indistinguishable from the shipped recipe's 0.427, so the task ranks configurations by noise plus one binary: whether a valid nonempty patch was submitted (sigma ~0.1 vs 0). The paper's baseline (0.436) disagrees with the task's own replay (0.4271), which changes how many cells 'beat the baseline' from 5 to 14. The 1.0 optimum compresses OPD sigma into 0.09-0.12. Further caveats: the proxy lacks the verifier fallback the instruction promises, the CompassVerifier fallback is an unvalidated LLM judge that runs without the question, and best-of-3 selection on the test set flips 4 cells. These defects move sigma by about 0.02 or less per cell, so they are logged as MINOR and not counted."
+ },
+ "cells": [
+  {
+   "case": "claude__opd_math_1p5b__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 0.449,
+   "approach": "Shipped k1 sampled-token OPD with prompt, batching and schedule changes (32x4 rollouts, teacher top-16), wall-clock limited to 648 steps. Best is the final checkpoint at 0.449.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'These are prompt, batching, scheduling, and checkpoint-engineering changes, not a new algorithm'",
+    "step 648: 0.448958 +/- 0.05223; 'the latter is numerical, not statistically established'",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 0.4214,
+   "approach": "Replaced sampled-token k1 with direct forward KL to the teacher's top-16 distribution on student samples. Best checkpoint 900 = 0.4214.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'directly minimizes teacher-to-student forward KL over all student weights'",
+    "step 600 0.420833, step 900 0.421354",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 0.3922,
+   "approach": "Unchanged k1 OPD with a cosine LR schedule and background HF saves. The trainer crashed at step 534 (33% of budget). Best 0.3922, below the shipped recipe.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The trainer itself reached step 534 at 10,225.1 seconds, then failed while writing the next rollout'",
+    "0.3703 / 0.3870 / 0.3922"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 0.4323,
+   "approach": "Unchanged k1 OPD; only peak LR, elapsed-time schedule and export policy changed. Best checkpoint 2200 = 0.4323.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'only the peak learning rate, elapsed-time schedule, non-binding 100,000-step ceiling, and export policy changed'",
+    "2100 0.418229, 2200 0.432292, 2201 0.427604 (1-step jitter 0.005)",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 0.4401,
+   "approach": "Exact KL(student||teacher) over the full vocabulary, using teacher top-16 plus a uniform tail, at LR 3e-6. Best checkpoint 600 = 0.4401; the final checkpoint scored 0.4292.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'exact KL(p_student || q_teacher) over the full vocabulary'",
+    "842/1920, 845/1920, 824/1920; 'its 25/1920 advantage over the supplied [shipped] ... ' within SE",
+    "Best-of-3 flips this cell to beat the 0.436 paper baseline"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 0.4266,
+   "approach": "Unchanged reverse-KL/PPO OPD with sampling, clipping and memory changes. Best (final) step 1651 = 0.4266.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'the signal and update-rule family are unchanged'",
+    "1650: 0.4109 vs 1651: 0.4266, a 0.016 swing in one step",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 0.4318,
+   "approach": "k1 OPD with 4x2 sampling, two PPO passes, constant LR. Best (final) 1901 = 0.4318.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'sampling, hyperparameter, and schedule tuning - not a new objective'",
+    "0.421354 / 0.426042 / 0.431771",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 0.4276,
+   "approach": "Data shuffling plus asymmetric 0.20/0.28 ratio clipping on unchanged k1 OPD. Best 2080 = 0.4276.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'This is a data-order and hyperparameter change, not a new signal or update rule'",
+    "'formal pg_clipfrac=0 gives no evidence that asymmetric clipping' mattered",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 0.4266,
+   "approach": "Seed-1 data permutation and a 10,240-token response cap on unchanged OPD. Best 1780 = 0.4266.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The candidate only uses a seed-1 data permutation and 10,240-token responses'",
+    "0.4109 / 0.4266 / 0.4255",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 0.4214,
+   "approach": "Seed-42 data permutation only. Best 2100 = 0.4214, 11 answers below the shipped replay.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'this is solely a data/sampling change'",
+    "'Step 2100 was best: +325 correct over the fixed start, but 11 below the shipped same-protocol replay'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__opd_math_1p5b__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 0.4052,
+   "approach": "Direct truncated forward KL to the teacher's top-16 distribution with constant LR. 1,125 steps; best 1100 = 0.4052.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'online teacher top-16 distribution -> direct truncated forward KL'",
+    "0.3896 / 0.4052 / 0.4005",
+    "Structured 'Protocol exposure' is Confirmed only because 'readable evaluator source exposed protocol and public-source hashes, not questions or answers'. instruction.md:25 permits reading the evaluator, and every other cell had the same source, so marking this one cell Confirmed is inconsistent and does not amount to exposure of final items."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 0.4245,
+   "approach": "Constant LR 1e-6 to 2e-6 only (399-byte patch). Best (final) 2021 = 0.4245.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Only AdamW's constant learning rate changes to 2e-6'",
+    "step 2000 0.420833 ... best 0.4245",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": null,
+   "approach": "Submitted an empty patch (no source change). Formal source scan marked it ineligible. No score; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'candidate.patch contained no source change, so there was no eligible candidate'",
+    "Early submission and an invalid empty candidate are agent-caused; zero matches the no-model convention"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 0.4333,
+   "approach": "Prompt batch and responses per prompt changed from 2/4 to 8/1 on unchanged k1 OPD. Best 2020 = 0.4333, then declining.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The patch changes prompt batch and responses per prompt from 2/4 to 8/1'",
+    "0.433333 / 0.420833 / 0.414583; 'Its 12/1,920 advantage over the supp[lied shipped]' is within SE"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 0.4375,
+   "approach": "Constant LR changed to 3e-6 only. Best 2060 = 0.4375; last checkpoint 0.4260.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Models, data, sampling, reward, optimizer settings other than learning rate ... unchanged'",
+    "0.4375 / 0.4234 / 0.4260; best-of-3 flips this cell to beat the 0.436 paper baseline",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": 0.4323,
+   "approach": "Schedule and checkpoint-policy changes only. Best (final) 2193 = 0.4323.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The candidate changed only schedule and checkpoint policy'",
+    "0.4229 / 0.4266 / 0.4323",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 0.4266,
+   "approach": "Teacher scored at temperature 1.0 (sampling-interface change) on unchanged k1 OPD. Best (final) 2081 = 0.4266, one answer below the shipped replay.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'This is a sampling-hyperparameter and interface-engineering change only'",
+    "'best 2081 scored 819/1920 ... one below the shipped method's directly comparable 820/1920'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 0.4245,
+   "approach": "run.sh defaults only: batch 2 to 16, rollouts 4 to 1, longer horizon, sparser saves. Best 1800 = 0.4245.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The patch changes only run.sh defaults'",
+    "0.417708 / 0.424479 / 0.421875",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 0.437,
+   "approach": "4x2 sampling, LR 2e-6 cosine to 1e-6, sparser saves. Best 2000 = 0.4370; last checkpoint 0.4208.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Only sampling composition, hyperparameters, schedule, and checkpoint policy changed'",
+    "839/1920 = 0.436979 at step 2000 (best); best-of-3 flips this cell to beat the 0.436 paper baseline",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 0.4292,
+   "approach": "4x2 sampling, 10k-step ceiling, constant LR on unchanged k1 OPD. Best (final) 2450 = 0.4292.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The best had 824 successes versus the shipped baseline's 820, far inside uncertainty'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 0.4302,
+   "approach": "LR 3e-6 with a 3,000-step cosine and sparser saves (run.sh only). Best 2200 = 0.4302.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Only hyperparameters, schedule, and checkpoint policy changed'",
+    "0.415625 / 0.430208 / 0.423438",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 0.4255,
+   "approach": "LR change and a higher step ceiling on unchanged k1 OPD. Best (final) 2225 = 0.4255.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'Only the learning rate changed each update's dynamics'",
+    "'Documentation promises verifier fallback in proxy and final grading, but proxy source uses rules alone' (confirmed: grade.py:55-63)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 0.4177,
+   "approach": "Added a DAPO rule-scored correctness GRPO term (coefficient 0.5) to k1 distillation. Best 1800 = 0.4177, 18 answers below the shipped replay.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'adds that task policy-gradient loss to 0.5x distillation'",
+    "'trailed the shipped 0.427083 by 18 answers'",
+    "Page flags the proxy verifier-fallback mismatch (confirmed)"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": null,
+   "approach": "Submitted an empty patch after probes (K3 alias removed). No formal run; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The lifecycle stopped after empty-candidate submission'",
+    "Empty patch is ineligible; zero matches the no-model convention"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": null,
+   "approach": "Submitted a 0-byte patch; forward-KL and k3 were shell-only overrides. No formal run; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "'The 0-byte candidate.patch changes no algorithm'",
+    "Structured 'Protocol exposure' is Confirmed, but the text says 'protocol exposure was not found'; the page contradicts itself"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 0.4349,
+   "approach": "Forward KL to teacher top-16 plus a GRPO outcome term scored on training answers by the bundled rule grader. Best 1800 = 0.4349; last checkpoint 0.4219.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'directly backpropagated forward-KL loss; each row's supplied answer is scored online by the bundled rule grader and contributes a GRPO outcome term'",
+    "1780 0.4229, 1800 0.4349, 1808 0.4219 (8-step jitter 0.013); 1,088-1,111 verifier fallbacks per checkpoint",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 0.4427,
+   "approach": "Constant LR 1e-6 to 2e-6 only. Best 2060 = 0.4427; last checkpoint 0.4224.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'This is pure hyperparameter tuning'",
+    "0.4296875 / 0.4427083 / 0.4223958: a 0.020 swing within 10 steps; best-of-3 flips this cell to beat the 0.436 paper baseline",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": null,
+   "approach": "Empty patch rejected at formal intake. No score; sigma=0.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'The empty patch is not an \"unchanged baseline candidate,\" because formal intake required a nonempty verifiable patch and rejected it'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__opd_math_1p5b__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 0.4328,
+   "approach": "Truncated top-16 forward KL replacing the k1 policy-gradient signal. Best 1880 = 0.4328.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "'directly minimizes the truncated sum p_teacher (log p_teacher - log p_student)'",
+    "1860 0.4229, 1880 0.4328, 1887 0.4234",
+    "Within noise of the shipped recipe 0.4271 (SE about 0.052; one-step checkpoint jitter about 0.016)."
+   ],
+   "confidence": "high"
+  }
+ ]
+}

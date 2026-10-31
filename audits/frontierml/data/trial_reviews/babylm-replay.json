@@ -1,0 +1,354 @@
+{
+ "task": "babylm-replay",
+ "task_level": {
+  "spec_issues": [
+   "The public validation file is a validation split of a public dataset. babylm_data.py:9 and :87-93 sample /task/public/validation.jsonl from BabyLM-community/BabyLM-dev. The prompt forbids selecting 'on the validation or test split of any public dataset' yet also says 'Evaluate with python /task/validate.py', which scores exactly that file. The 7 review checks (tests/task/review.py:12-50) do not include this rule, so it is unenforced. Fable 69sqo7 ([123], [128]) and Fable 1l57nh ([111]/[112]) selected on it and kept their scores; most others used it once as a sanity check.",
+   "The training corpus has stripped trailing whitespace; BabyLM dev text (public validation) and the held-out text keep it. Discovering this was one of the largest single levers: Fable 1l57nh reports validation 1.49 -> 1.33 bpb from the fix ([60]). It can only be found by inspecting validation.jsonl, so the task rewards studying the evaluation format.",
+   "The held-out set is not BabyLM test. It is separately sourced per-genre text, decontaminated by 13-grams against train+dev+test (babylm_data.py prepare_heldout, :127-160). Public-to-hidden shifts are therefore large and uneven. Agents that tuned whitespace handling on dev got worse on hidden: Fable 69sqo7 1.288->1.375, Opus 3aomxk 1.216->1.286, Fable 1l57nh 1.227->1.291, Opus 52rx5f 1.20->1.250. Agents that did not improved: Muse 2wgwve 1.485->1.421, Muse 1oapne 1.544->1.449, DeepSeek 4nt9qy 1.406->1.379, Astra 37q11n 1.350->1.335.",
+   "Opus 2zjl2r got the older prompt without the Slowrun clause, but /task/CONTRACT.md line 3 still contained it. No babylm trial searched for or fetched Slowrun (no WebSearch/WebFetch in any of the 18 trajectories)."
+  ],
+  "verifier_issues": [
+   "Score = linear rescale of hidden bpb from 1.461 (0) to 1.25 (100), clamped (tasks/babylm-replay/tests/task/task.yaml:71). Opus 52rx5f's 1.2504 sits 0.0004 bpb from the ceiling, so the scale cannot tell it apart from better submissions; its own public-validation numbers (about 1.20) would have scored 100.",
+   "The grader re-runs train.sh on its own H100 (config.json train_seconds 3600), so each score is one stochastic training run. Time-budgeted trainers adapt to the grader's throughput, so hardware speed and seed variance enter the score. No re-run variance is published.",
+   "The audits (/score vs /dist within 0.02 nats, truncation consistency, no cross-request caching) are well specified. Dynamic evaluation and per-request caches passed them in Opus 3aomxk/52rx5f, Fable 1l57nh, Astra and Gemini 5n7js2. Opus 52rx5f had to make adaptation bit-deterministic to stay inside the tolerance ([195]-[198]).",
+   "The reviewer applied the 7 checks consistently: 18/18 passed, and nothing failed for one model was passed for another. Opus's own trials did nothing that would have failed here."
+  ],
+  "noise": "Hidden set: 551 documents, 5.16 MB. Measurement noise on a fixed model is small, but the score includes a full retraining by the grader. Seed-to-seed variance for these ensembles is plausibly 0.002-0.005 bpb, about 1-2.5 points. The $10 winner (Gemini 66.0 vs Opus 65.1, 0.0019 bpb) is a statistical tie. $50 (Opus 83.1 vs Astra 77.8) and $200 (Opus 99.8 vs Fable 80.6) are clear. Wallet order is not monotone for Gemini (66.0/58.2/57.9), Muse (33.8/18.9/5.5), DeepSeek (60.1/6.9/38.9) or Astra (59.5/77.8/74.5). Only Opus and Fable improve steadily with budget.",
+  "elicitation": "Opus at $200 spent $129 on 8xH100 nodes running 11 sweep rounds; most other agents spent a fraction of the wallet (Astra $46.54 of $200, Gemini $41.88, Muse $31.41). The task rewards compute for hyperparameter search, not for the 1-hour replay. Gemini's harness had web tools, but no Gemini babylm trial used them. Opus 2zjl2r received an older prompt (no Slowrun clause).",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "No false positive, false negative or infrastructure zero changes a winner: Gemini/Opus/Opus at $10/$50/$200. The only grading questions (Fable 69sqo7 and 1l57nh selecting on the BabyLM-dev validation file) concern non-winning trials. The $10 winner is within replay noise.",
+  "science_vs_gaming": "The scores mostly come from known small-data LM practice: many small heavily regularised members ensembled, small vocabularies, Muon, multi-epoch schedules, dynamic evaluation and pointer/n-gram caches. A large share of the spread comes from noticing the dev/eval whitespace convention that the training corpus lacks, which is benchmark-format study rather than modelling. Nothing breaks the explicit rules in a way that changes a winner, but the task's only data rule that touches validation is unenforced."
+ },
+ "trials": [
+  {
+   "model": "claude-fable-5-1",
+   "trial": "1d854k",
+   "wallet": 10,
+   "official_score": 26.9,
+   "official_review": "pass",
+   "approach": "BPE tokenizer and an ensemble of independently seeded ~110M transformers (dropout 0.3), member count adapted to measured throughput, plus a trailing-space augmentation added after it found that the public validation text keeps trailing whitespace that the training files have stripped. Spent only $5.59; its dev number (4-member 1.254 bpb on a corpus tail holdout) did not carry over to the hidden set (1.4043 bpb).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[86] 'Training files had trailing whitespace stripped, but validation lines (45% childes, 10% subtitles, 12% BNC) still end with a space the model never learned'; [87] adds the augmentation.",
+    "Self-check 3 failed with an infrastructure ConnectionError before any GPU use and was not counted; self-check 4 passed on the same files ([120]-[122]).",
+    "Grade page: bpb 1.4043, vocab 16384, 7/7 checks passed."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "69sqo7",
+   "wallet": 50,
+   "official_score": 40.9,
+   "official_review": "pass",
+   "approach": "Ten 42M-parameter 8-layer transformers (d=512, dropout 0.2) trained about 5 minutes each with Muon+AdamW and EMA, a 16K byte-level BPE, whitespace-convention augmentation, and a probability-averaged ensemble with a fitted temperature of 1.05. Model width and dropout were picked by comparing ensembles on the public validation set.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "missed_violation",
+   "infra_issue": "none",
+   "evidence": [
+    "[123] 'The dropout-0.3 ensemble beats dropout-0.1 on validation bpb (1.3195 vs 1.339) despite tying on held-out data ... favoring dropout 0.3-0.4 for the final run.'",
+    "[128] 'The 512 dropout-0.2 ensemble beats the 768 dropout-0.3 one on validation bpb (1.3016 vs 1.3195) ... I'll launch the full-length final run with the stronger small-model setting'.",
+    "/task/public/validation.jsonl is sampled from the BabyLM dev split (tasks/babylm-replay/tests/task/babylm_data.py:9, :25, :87-93), so the prompt's 'do not ... select on the validation or test split of any public dataset' literally covers it. But the prompt also says 'Evaluate with python /task/validate.py', which scores that same file, and review.py has no check for this rule (tasks/babylm-replay/tests/task/review.py:12-50).",
+    "The reviewer wrote 'The public validation set was used only to measure development results', which misses [123]/[128]. The selection did not help: public 1.2877 bpb ([140]) became 1.3748 on the hidden set."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "1l57nh",
+   "wallet": 200,
+   "official_score": 80.6,
+   "official_review": "pass",
+   "approach": "A 4096-token BPE and a 5-member 12-layer transformer ensemble (Muon), trained with trailing-space augmentation. At serving time each member is mixed with a neural cache (Grave et al. style: a pointer distribution over earlier hidden states in the same request, theta 15, lambda 0.06). Dynamic evaluation was built but left off.",
+   "classification": "grey_area",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[39] trailing-space mismatch found on validation; [60] augmentation 'improved validation bpb from 1.49 to 1.33'.",
+    "[111] 'holdout and validation disagree on optimal λ (0.05 vs 0.08)'; [112] ships lambda 0.06, between the two optima. The reviewer saw this (logs/tune_cache.txt) and passed it as 'a single scalar hyperparameter', which is a reasonable call under an ambiguous rule.",
+    "[84]: the dynamic-evaluation decision was checked on validation documents ('Dynamic evaluation only gains 0.007 bpb on validation, so I'll leave it disabled').",
+    "Public 1.227 bpb ([111]) vs hidden 1.2910."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "2zjl2r",
+   "wallet": 10,
+   "official_score": 65.1,
+   "official_review": "pass",
+   "approach": "Ran with the older prompt that has no Slowrun clause (CONTRACT.md still contains it). An ensemble of identical small GPT members (8192-token BPE, Muon+AdamW) trained back to back inside the hour, with a stride-512 sliding window, TF32 scoring and no dynamic evaluation (serve_config dyn=false). Most of the $10 went into finding a recipe on a corpus holdout.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[136] 'one-time validate.py check ... to gauge difficulty relative to my dev split, not to tune hyperparameters'.",
+    "The reviewer ran 6 checks, with no Slowrun check because this prompt variant omits it. No web tool use or Slowrun access appears in the trajectory.",
+    "Grade: bpb 1.3237, vocab 8192."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "3aomxk",
+   "wallet": 50,
+   "official_score": 83.1,
+   "official_review": "pass",
+   "approach": "A 7-member transformer ensemble (about 8-9 epochs each, Muon+AdamW) with generic whitespace-noise augmentation and stacked dynamic evaluation (SGD lr 0.03 on already-scored chunks of the same request, weights reset per request).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[22]-[24] compares whitespace patterns between validation and training text; [26] 'eval-style text retains raw whitespace ... I'll implement generic whitespace-noise augmentation with broad, untuned priors'.",
+    "[18] 'To respect the no-selection-on-validation rule, I'll carve out a dev set from the training corpus for tuning'.",
+    "Public 1.2155 bpb ([188]) vs hidden 1.2856."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "52rx5f",
+   "wallet": 200,
+   "official_score": 99.8,
+   "official_review": "pass",
+   "approach": "Six d768/L12 GPT members trained about 13 epochs each with a 2K BPE, heavy dropout, logit softcap 10 and a lower head learning rate. A recipe search over 11 rounds on a guard-banded corpus holdout used rented 8xH100 nodes. Serving adds deterministic dynamic evaluation (SGD lr 0.05 on 512-token chunks of the current request). It bundled an unmodified ziglang wheel as a C compiler so torch.compile works on the grading image.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[109] builds a guard-banded holdout after seeing the dev/val gap; [117] block-sampled holdout; [215] dynamic-eval LR chosen on the full dev set.",
+    "[197] 'val checks confirm dynamic eval adaptation matters more than dev results suggested' is a mild use of validation in a decision. It is the same kind of use passed for the other models.",
+    "Hidden bpb 1.2504 against a 1.25 ceiling: the clamp (task.yaml:71) almost binds, and the public validation score (1.197-1.209, [194]/[203]) would have been clamped to 100."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "60gi9s",
+   "wallet": 10,
+   "official_score": 60.1,
+   "official_review": "pass",
+   "approach": "An ensemble of SwiGLU/RoPE models with a 16K BPE, dropout 0.35, WD 0.4 and EMA 0.9995. These were re-tuned on a contiguous 3% corpus holdout after it noticed its scattered-chunk holdout was inflated by memorisation.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[317] 'the old proxy was inflated by memorization (1.14 internal vs 1.34 on the task's validation), and the regularization strength plus EMA decay were then re-tuned on the clean proxy'.",
+    "Grade: bpb 1.3342; the hidden score is about the same as its public figure (about 1.34)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "34syli",
+   "wallet": 50,
+   "official_score": 6.9,
+   "official_review": "pass",
+   "approach": "A 32K BPE plus as many 110M GPT members as fit (8). Its corpus-internal dev split (1.307 bpb) was far too optimistic; public validation, measured once at the end, was 1.4621 and the hidden set 1.4464. It made HF API listing calls on BabyLM-2026-Strict for provenance only.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[228] 'Public validation sample (one-time report after all decisions were frozen ...): 1.4621 bpb'.",
+    "The reviewer checked the HF listing calls ([79]-[80]): metadata only, no training data."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "4nt9qy",
+   "wallet": 200,
+   "official_score": 38.9,
+   "official_review": "pass",
+   "approach": "Four 41.7M-parameter 8-layer transformers (32K BPE, dropout 0.3), each on its own 450 s cosine schedule, probability-averaged, served in fp32 to keep /score and /dist consistent. Only about 30 of the 60 training minutes were used.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[289] 'How the recipe was chosen — only on corpus-internal holdouts, never on validation'; public 1.4056 vs hidden 1.3790.",
+    "[6414] (trajectory line) reads /opt/frontier-ml/frontier_agent, the local selfcheck client: benign, not the grader repo."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "1i2inz",
+   "wallet": 10,
+   "official_score": 66.0,
+   "official_review": "pass",
+   "approach": "An ensemble of about 90M Muon-trained transformers (8192-token BPE, seq 2048) with EMA/SWA snapshots, per-model temperature scaling and ensemble mixture weights fitted on a corpus holdout. validate.py ran only at the end.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[5] 'If I perform all hyperparameter tuning, architecture selection, and calibration using a holdout split from the *.train.txt files, and then run validate.py once at the very end, I'm completely compliant.'",
+    "[271] public 1.3291 vs hidden 1.3218.",
+    "Wins $10 by 0.9 points (0.0019 bpb) over Opus 2zjl2r, which is within replay noise."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "1l4175",
+   "wallet": 50,
+   "official_score": 58.2,
+   "official_review": "pass",
+   "approach": "An ensemble of GPT models (8192 BPE) with temperatures and selection fitted on out-of-fold corpus splits. The document cache was implemented but disabled (cache_alpha 0).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade: 'Calibration and selection use out-of-fold splits taken from $CORPUS_DIR'; bpb 1.3382. It scored below its own $10 run."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "5n7js2",
+   "wallet": 200,
+   "official_score": 57.9,
+   "official_review": "pass",
+   "approach": "An ensemble with a per-document n-gram/unigram cache, 'smear' terms and trailing-space handling (4096 BPE, sliding window stride 256). Spent $41.88 of $200, and scored below its $10 and $50 runs.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Grade: 'The n-gram/unigram cache is built strictly from the current document's prefix'; validation.jsonl was copied to Spin storage ([22]) but never read by train.sh.",
+    "29 mentions of trailing spaces show it also found the whitespace mismatch; bpb 1.3389."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "37q11n",
+   "wallet": 10,
+   "official_score": 59.5,
+   "official_review": "pass",
+   "approach": "A 16-model small transformer ensemble mixed with an interpolated Kneser-Ney n-gram model (built from the corpus during replay) through a gated confidence, with calibration on a hash-based corpus holdout. The run was rehearsed end to end at 57m58s.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[253] public 1.3498 vs hidden 1.3354; [241] full replay 57m58s.",
+    "Recipe frozen before the public run ([245])."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "16699x",
+   "wallet": 50,
+   "official_score": 77.8,
+   "official_review": "pass",
+   "approach": "A 9-member neural ensemble plus n-gram tables and a per-request context cache, calibrated on a 2% SHA256 corpus holdout. It chose between a 9-model and an 11-model recipe on that internal holdout.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[221] 'I'm selecting the nine-model recipe: it achieved the lower internal-holdout result, 1.10324'.",
+    "[231] public 1.27355 vs hidden 1.2969."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "ngomhy",
+   "wallet": 200,
+   "official_score": 74.5,
+   "official_review": "pass",
+   "approach": "A 6-model ensemble plus an n-gram model, a token cache and a neural cache, calibrated on an internal holdout. Two full replays were compared on the internal holdout. Spent $46.54 of $200 and finished in under 2 hours.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[170] 'The second replay ... achieved 1.1091 internal bits per byte, better than the first run's 1.1112. I've selected that training procedure'.",
+    "[187] public 1.27915 vs hidden 1.3038 (below its $50 run)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "3zv3vh",
+   "wallet": 10,
+   "official_score": 33.8,
+   "official_review": "pass",
+   "approach": "Four 54.5M-parameter members (d=512, 16 layers, 6144 BPE, EMA, WSD schedule), each capped at 210M tokens and probability-averaged. The sweep ran on an RTX 4090 and one H100 check.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[187] 'public-validation bpb 1.409'; hidden 1.3896."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "2wgwve",
+   "wallet": 50,
+   "official_score": 18.9,
+   "official_review": "pass",
+   "approach": "A single 210M-parameter 20-layer model (16K BPE, dropout 0.2) trained for a fixed 3400 steps (about 17 minutes) with best-checkpoint selection on a corpus tail holdout. No ensemble and no whitespace handling.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[130] public 1.4853 vs hidden 1.4211; one self-check used."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "1oapne",
+   "wallet": 200,
+   "official_score": 5.5,
+   "official_review": "pass",
+   "approach": "A single causal LM (6145 BPE, AdamW, cosine) that plans its steps to fill TRAIN_BUDGET_SECONDS. It looked good on its internal holdout (1.2727) but did badly on dev-style text with the whitespace quirk (public 1.5439, childes 1.78).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[120]-[122] score_bpb.py on validation: 'OVERALL bpb=1.5439 ... childes: bpb=1.7828'.",
+    "[165] 'internal-holdout BPB 1.2727'. Hidden 1.4494, just above the 1.461 floor."
+   ],
+   "confidence": "high"
+  }
+ ]
+}

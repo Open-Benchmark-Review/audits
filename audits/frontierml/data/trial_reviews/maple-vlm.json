@@ -1,0 +1,358 @@
+{
+ "task": "maple-vlm",
+ "task_level": {
+  "spec_issues": [
+   "CONTRACT.md: 'Don't use MMMU or re-releases of it like MMMU-Pro at all, even for evaluation. The one exception is the examples in /task/public/.' review.py adds that the held-out questions 'are drawn from the public MMMU dev and validation rows' (tests/task/review.py, training_data_provenance). The 129 public examples are MMMU validation rows (validation-0001 is MMMU's Accounting question about 'company B'); 129 + 900 = 1,029 of MMMU's 1,050 dev+val rows, consistent with a disjoint split.",
+   "CONTRACT.md says 'Reply with only the option letter for multiple-choice questions', but the judge 'reads the question, the answer key and your complete reply' (validate.py docstring). It does not say whether a reasoning trace may precede the answer or whether the model may reason internally. The scoring floor assumes 8,192 tokens of thinking; agents who read the reply rule literally and disabled thinking (Fable 5c4mu5 [49] 'non-thinking mode outperforming direct decoding', DeepSeek, Muse) were structurally capped below 0. The floor is never disclosed to agents.",
+   "The review policy lets the shipped public examples be used for training and selection (operator decision 2026-09-29, review.py), matching the prompt. Several trials trained on them (Astra 1e2lgl, Muse 2204mx, 2nzodg); with 129 rows that matters little."
+  ],
+  "verifier_issues": [
+   "Floor: 0 = 0.4378 (394/900), text-only Maple answering with images removed, thinking sampled up to 8,192 tokens, and multiple-choice answered by one greedy token restricted by a grammar to the option letters (tests/task/task.yaml:42-58). Maple's own free reply instead of the restricted letter gives 0.329 under the same protocol, so the floor uses a decoding aid that no submission is told about. Ceiling 1.0 (all correct).",
+   "The floor was raised after half the runs. task.yaml:53-55: '0 was 0.3489 = 314/900 through 2026-10-07' (thinking off). Opus, Fable and Astra ran 10-03/05, Muse 10-12, Gemini 10-13/14, DeepSeek 10-20; all published scores use the new floor. Under the old floor the 18 trials would score: Opus 14.0 / 19.3 / 15.7, Astra 8.2 / 9.9 / 6.1, DeepSeek 0 / 4.6 / 0, Fable 1.7 / 0 / 0.2, Argon 0 / 0 / 0.7, Muse 0 (by wallet $10/$50/$200). Winners do not change, but 15 of 18 trials clamp to 0 under the new floor and 8 under the old one.",
+   "Noise. 900 questions give a binomial SE of 0.0165 accuracy, about 2.9 points on the rescaled 0-100 scale; the floor is itself one sampled run (temperature 0.6) and moves by 0.017 with protocol choices (0.422 to 0.439 across budgets and system prompts, task.yaml:51-53). Opus 3gpel2 (0.44 = 396/900, +2 questions) and ev754s (0.4511, +12) are indistinguishable from the floor (z 0.1 and 0.8 against a fixed floor, lower for two samples). Only Opus 11dhgk (0.4744, +33 questions, z 2.2 fixed / 1.6 two-sample) is plausibly above it, and only marginally. In short, the three published nonzero scores (0.4, 6.5, 2.4) are noise-level except perhaps 6.5.",
+   "Every answer, including multiple choice, is decided by gpt-6-luna (config.json judge_model). That adds judge variance but also removes parsing failures; no trial in this task appears to have been scored on malformed replies.",
+   "No trial in this task accessed inductionlabs/frontier-ml-tasks, the benchmark repo or frontierml.org (grep over all 18 trajectories). None downloaded MMMU or MMMU-Pro; DeepSeek trials discussed it ([14] in 2usy2h) but used LLaVA-OneVision / the Cauldron train splits."
+  ],
+  "noise": "At raw accuracy the ordering is clear and stable: Opus (0.44-0.47) > Astra (0.39-0.41) > DeepSeek/Fable/Argon/Muse (0.30-0.38). Wallet ordering within models is not monotone for anyone (Opus peaks at $50, Astra at $50, Fable at $10), consistent with everything sitting within 1-3 SE of a 0.35-0.45 band. Winner margins on raw accuracy (two-sample z): $10 Opus 3gpel2 0.440 vs Astra 1e2lgl 0.402 (z about 1.6), $50 Opus 11dhgk 0.474 vs Astra 2xzouq 0.413 (z about 2.6), $200 Opus ev754s 0.451 vs Astra 44slmp 0.389 (z about 2.7). The $10 win could flip under noise on raw accuracy; on the published scale it is 0.4 vs 0, which is also noise relative to the floor.",
+  "elicitation": "The decisive difference is inference-time reasoning, not vision. All three Opus trials served Maple in thinking mode with a budget and voting: 3gpel2 voted over 3-5 thinking-prefix variants ([195], [211] 'bumped accuracy to 38.8% (MC 40.8%) versus 35.7% for a single prefix'); 11dhgk used a describe-then-reason prefix and 3-sample self-consistency ([160], [163]); ev754s did rejection-sampled self-distillation of thinking traces so the connector did not suppress reasoning ([263]). Opus 11dhgk's own text-only ablation scored about the same as with images ([141] 'The text-only ablation scores 43.3% on MC, nearly matching the image-included results'), and DeepSeek 1af6us found images net-negative ([307] '40% with no images vs 35% with them'). Most other trials answered directly or with short thinking, which caps them near the thinking-off anchor (0.35).",
+  "epoch_scoring_item": "pass",
+  "epoch_rationale": "No false positive, false negative or infrastructure zero changes a winner; Opus leads every wallet on raw accuracy as well as on the clamped scale. The task nonetheless measures little: 15 of 18 trials clamp to 0, the nonzero scores are within about 1 SE of the floor except Opus 11dhgk, and the floor was moved after the Opus/Fable/Astra runs.",
+  "science_vs_gaming": "No gaming found, but little measurable vision either. The only above-floor gains come from making a ternary text model reason (thinking budgets, prefixes, self-consistency voting, self-distilled traces), which is a real and transferable observation about adding vision to a reasoning LM (connectors trained on short answers suppress thinking; Opus ev754s [263]), but the score barely separates a VLM from the same model reading only the text. Connector designs were standard: pretrained Qwen2.5-VL / Qwen3-VL / SigLIP2 towers, MLP connectors (often ridge-initialised from Qwen's embedding table), LLaVA-OneVision / Cauldron train splits, some ternary-STE QAT on attention (Argon, Astra)."
+ },
+ "trials": [
+  {
+   "model": "claude-opus-5-5",
+   "trial": "3gpel2",
+   "wallet": 10,
+   "official_score": 0.4,
+   "official_review": "pass",
+   "approach": "Qwen3.5 vision tower with a ridge-initialised connector trained on LLaVA-OneVision train data into frozen packed-ternary Maple, served with thinking (3072 tokens) and voting over thinking-prefix variants; the 0.4 score is two questions above the text-only floor.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[87] 'Baseline accuracy on the 120 public MC questions is 35.8% both with and without images, suggesting text reasoning alone does most of the work'.",
+    "[195], [211]: 3072-token thinking budget and voting across thinking-prefix variants (+3 points on public).",
+    "[246]: step-1000 connector (42.6% public) chosen on the 129 public examples, which the task allows.",
+    "Raw 0.44 = 396/900 vs floor 394/900: indistinguishable from the floor (z about 0.1)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "11dhgk",
+   "wallet": 50,
+   "official_score": 6.52,
+   "official_review": "pass",
+   "approach": "Qwen3-VL-30B-A3B vision tower and deepstack mergers with a least-squares-initialised connector into frozen ternary Maple, two training phases on LLaVA-OneVision train shards, served with a describe-then-reason thinking prefix and 3-sample self-consistency; most of the margin over the floor plausibly comes from voting rather than vision.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[25] least-squares map from Maple to Qwen embeddings to initialise the connector; Qwen3-VL-30B-A3B ViT + deepstack mergers.",
+    "[141] text-only ablation 43.3% MC, about the same as with images.",
+    "[160], [163]: 3-way self-consistency with early stop, 'the best results yet: 49.2% MC accuracy'.",
+    "Raw 0.4744 = 427/900 vs floor 394/900: +33 questions, z 2.2 against a fixed floor, 1.6 two-sample. Reviewer checks (ternary 0 mismatches in verify_backbone.log, LLaVA-OV train shards only) agree with the trajectory."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "claude-opus-5-5",
+   "trial": "ev754s",
+   "wallet": 200,
+   "official_score": 2.37,
+   "official_review": "pass",
+   "approach": "Qwen3-VL-30B-A3B vision tower and connector into frozen ternary Maple, then two rounds of rejection-sampled self-distillation on Maple's own correct thinking traces for training-split questions so it keeps reasoning on image inputs; score is within noise of the floor.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[263] 'the connector trained on short answers makes Maple skip reasoning on image tasks ... fixing this via rejection-sampled self-distillation—fine-tuning on 8k correct thinking-mode traces'.",
+    "[353] RFT2 connector chosen on the public set plus a dev set from training splits.",
+    "Raw 0.4511 = 406/900: +12 questions over the floor, within noise (z about 0.8)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "3tqc5e",
+   "wallet": 10,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL-3B vision tower with a ridge-initialised connector on Cauldron train subsets into frozen Maple, one epoch within $10, short thinking; legitimate but below the text-only-with-reasoning floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[58] 'Trained connector scores 37.2% direct (MC 40%) and 38.8% with 512-token thinking ... beating the 31% untrained baseline'.",
+    "Below the published floor: raw accuracy 0.36 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 1.7."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "5t450m",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen3-VL-2B vision tower, connector and three DeepStack adapters into frozen Maple, Cauldron and LLaVA-OneVision train data, think mode with a prefix; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[82] 'Text-only baselines on the 129 public samples: no-think scored 30.2%, think scored 35.7%'.",
+    "Below the published floor: raw accuracy 0.3156 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "claude-fable-5-1",
+   "trial": "5c4mu5",
+   "wallet": 200,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen3-VL-2B vision tower and MLP connector into frozen Maple, two training stages on LLaVA-OneVision and Cauldron train data, served without thinking; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[49] 'non-thinking mode outperforming direct decoding—so I'll use that format going forward'; [80] '41.7% accuracy ... beating the 38% text-only baseline'.",
+    "Below the published floor: raw accuracy 0.35 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0.2."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "1e2lgl",
+   "wallet": 10,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL vision tower and connector with ternary-STE attention fine-tuning, trained on Cauldron train subsets, procedural synthetic data and the public examples; second-best raw accuracy at $10 but below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: Qwen2.5-VL vision transformer, overridden merger, small connector, packed ternary QAT attention override; Cauldron train + procedural synthetic + the public examples.",
+    "[177] '1,250-step instruction checkpoint matched the baseline at 18/32'.",
+    "Below the published floor: raw accuracy 0.4022 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 8.2."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "2xzouq",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL vision tower with partially fine-tuned top blocks, an MLP connector and ternary QAT on Maple's attention, trained on LLaVA-Pretrain, Cauldron, PathVQA and PMC-VQA train data; 51% on the public examples but 41% held-out, below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "[602] 'The judge completed the baseline evaluation: 60/129 correct (46.5%)'; closing message 'Supplied-example validation scored 66/129 and 67/129'.",
+    "Reviewer: refined vision blocks 28-31 and merger, LayerNorm+MLP connector, ternary-STE attention; LLaVA-Pretrain, 17 Cauldron subsets, PathVQA, PMC-VQA train.",
+    "Below the published floor: raw accuracy 0.4133 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 9.9."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gpt-6-astra",
+   "trial": "44slmp",
+   "wallet": 200,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL-3B tower and MLP connector, ternary attention QAT and retrained per-row expert scales, trained on Cauldron, LLaVA-Pretrain, ScienceQA, A-OKVQA and PathVQA train data; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: Qwen2.5-VL-3B tower + MLP connector, fine-tuned ternary attention re-packed, per-row expert magnitudes changed over fixed ternary signs (still per-row ternary).",
+    "Closing message: 'Supplied validation accuracy: 57/129 (44.2%)'.",
+    "Below the published floor: raw accuracy 0.3889 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 6.1."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "3ucq9b",
+   "wallet": 10,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "SigLIP2 so400m encoder and pixel-shuffle MLP connector into Maple, a connector soup calibrated on the public examples; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: SigLIP2 so400m + pixel-shuffle MLP connector; shipped delta is a connector soup built by calibrate_soup.py on the public examples (allowed); ScienceQA + Cauldron train.",
+    "Below the published floor: raw accuracy 0.3422 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "4x6yjx",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "SigLIP2 encoder and projector with ternary-STE fine-tuning of Maple's attention, norms and routers on a mix of VQA train splits; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: SigLIP2 + projector; ternarized attention, trained norms and routers; ScienceQA, A-OKVQA, PathVQA, VQA-RAD, LLaVA-OV and Cauldron train; code rejects any 'mmmu' repo.",
+    "Below the published floor: raw accuracy 0.3244 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "gemini-4-argon",
+   "trial": "45x4mn",
+   "wallet": 200,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "SigLIP2 encoder with a multi-layer fusion connector and ternary QAT on Maple's attention; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: SigLIP2 so400m with multi-layer fusion connector, ternary-STE attention QAT, Cauldron + LLaVA-OV train.",
+    "Below the published floor: raw accuracy 0.3533 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0.7."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "68lybd",
+   "wallet": 10,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL-3B tower with a residual MLP connector into frozen packed Maple, trained on about 45k VQA train examples; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: Qwen2.5-VL-3B tower + merger, residual MLP connector, last 4 vision blocks trained; ScienceQA, A-OKVQA, ChartQA, TextVQA, Geometry3K train + public rows.",
+    "Below the published floor: raw accuracy 0.2967 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "2nzodg",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL-7B vision tower and MLP connector into frozen Maple, Cauldron train subsets plus the public examples; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: Qwen2.5-VL-7B vision tower (last 4 blocks tuned) + LayerNorm MLP connector, Cauldron train + public examples.",
+    "Below the published floor: raw accuracy 0.3178 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "muse-wonder",
+   "trial": "2204mx",
+   "wallet": 200,
+   "official_score": 0,
+   "official_review": "pass",
+   "approach": "Qwen2.5-VL-7B encoder and 2-layer MLP connector into frozen Maple on document/chart/science VQA train data; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "sound",
+   "infra_issue": "none",
+   "evidence": [
+    "Reviewer: Qwen2.5-VL-7B encoder + 2-layer MLP connector, frozen Maple; DocVQA, ChartQA, ScienceQA, TextVQA, TabMWP, MedMCQA train + public examples.",
+    "Below the published floor: raw accuracy 0.3433 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "4ejuj1",
+   "wallet": 10,
+   "official_score": 0,
+   "official_review": "skipped",
+   "approach": "Qwen3-VL-8B ViT re-implemented in PyTorch plus a 25M-parameter connector trained on 50k LLaVA-OneVision train samples into frozen Maple; no rule violation found; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "Review skipped by the operator; my check: Maple frozen and packed 2-bit (closing message 'language network is untouched ternary; no second LM'), only Qwen3-VL-8B ViT weights shipped, data 50,032 samples from 20 LLaVA-OneVision train configs; no MMMU download found (all MMMU mentions are reasoning about the rule, e.g. [9]).",
+    "Below the published floor: raw accuracy 0.3289 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "1af6us",
+   "wallet": 50,
+   "official_score": 0,
+   "official_review": "skipped",
+   "approach": "Qwen2.5-VL-3B tower and MLP connector into frozen Maple on LLaVA-OneVision train data, served with a guidance-style blend of image-conditioned and text-only letter scores after finding the images hurt; no violation found; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "Review skipped by the operator; my check: frozen packed Maple, Qwen2.5-VL-3B tower only, 3-layer MLP connector, LLaVA-OneVision train rows (hf download commands for lmms-lab/LLaVA-OneVision-Data only); no MMMU or held-out access.",
+    "[307] 'the model scores 40% with no images vs 35% with them — the image tokens are net-negative'; [312] serves a classifier-free-guidance blend of image and text-only predictions (same Maple model, allowed).",
+    "Below the published floor: raw accuracy 0.3789 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 4.6."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "model": "deepseek-v4-1-flash",
+   "trial": "2usy2h",
+   "wallet": 200,
+   "official_score": 0,
+   "official_review": "skipped",
+   "approach": "Qwen2.5-VL-3B tower and small MLP connector trained on Cauldron train subsets into frozen Maple; no violation found; below the floor.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "reviewer_assessment": "skipped",
+   "infra_issue": "none",
+   "evidence": [
+    "Review skipped by the operator; my check: frozen packed Maple, Qwen2.5-VL-3B tower, 16.8M MLP connector, 30,000 Cauldron train-split samples at a pinned revision (split='train'); MMMU only discussed ([14]).",
+    "[467] combines image and no-image letter z-scores at inference (same model).",
+    "Below the published floor: raw accuracy 0.34 on 900 held-out MMMU questions vs 0.4378 for text-only Maple with its own reasoning (tests/task/task.yaml:42-44), so the score clamps to 0. Under the anchor used until 2026-10-07 (0.3489, thinking off, task.yaml:53-55) it would be 0."
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

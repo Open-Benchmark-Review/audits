@@ -1,0 +1,527 @@
+{
+ "task": "owl_wanda_opt6p7b_70pct",
+ "task_level": {
+  "rubric_code": "FN",
+  "confirmed": true,
+  "counted_toward_threshold": false,
+  "hidden_data_integrity": [
+   "Holds by mount list. WikiText-2 test is mounted only in the score phase. Explore mounts validation only, and retrain mounts no WikiText at all (tasks/owl_wanda_opt6p7b_70pct/declaration.py:70-77, 104-111, 162; environment/assets.lock.yaml:126, 154). This matches the paper's claim. The declaration admits the boundary is 'Neither ... enforced by a check or a file permission' beyond the mounts (declaration.py:16-20). That is sufficient given the container isolation.",
+   "Proxy (validation, 122 blocks) and final (test, 140 blocks) are disjoint splits (harness/final_eval.py:5-10, 262-270).",
+   "network_mode = 'no-network' (task.toml:32). Retrain and score run with --network=none (orchestrator/container.py:216-230). Explore reaches only the model API through an allowlisting proxy (orchestrator/egress.py:1-4). Case pages report denied egress and no external input.",
+   "WikiText-2 test is public, and OPT's pretraining corpus includes Wikipedia. Memorisation affects every candidate equally through the shared dense start (dense 10.86, instruction.md:35). A patch cannot carry test text unnoticed: inspect_patch is applied (declaration.py:125), and the case pages' literal searches found no test text in any trajectory or patch. Not a defect.",
+   "Swapping Wanda for SparseGPT (23 of 28 scored cells use SparseGPT/OBS; 25 of 28 use SparseGPT/OBS or fine-tuning) is within the rules: 'OWL/Wanda is the shipped implementation rather than an enforced family' (instruction.md:53), and 'Candidates may change pruning, search, calibration use, objectives, and may train using only the available asset' (instruction.md:27). The upstream OWL tree shipped in /workspace/owl already contains a (LLaMA-only) SparseGPT route that agents ported (luna-xhigh and terra-low case pages). The paper's 'this task does no training' describes only the shipped recipe (declaration.py:3-9). 18 of 28 scored cells fine-tune or distill on C4, and that is where the 12-16 perplexity results come from."
+  ],
+  "scorer_issues": [
+   "The exact-sparsity gate exists and is enforced on the scored tensors: SPARSITY_WINDOW = (0.699, 0.701) (harness/grade.py:34, 168-170). A violation writes status 'invalid' with no reward (harness/final_eval.py:209-240). The 140-block shape check is at final_eval.py:244.",
+   "The gate counts only nn.Linear weights inside decoder layers (grade.py:72-83). Embeddings (tied lm_head), positional embeddings, LayerNorm and biases fall outside it and may be trained densely; at least 10 cells did so, e.g. opus-5/max and xhigh, sonnet-5/high, sol/max and medium (bias/LayerNorm only), terra/max and xhigh, kimi-k3/max. This is consistent with task.toml:59 ('decoder sparsity') and the Wanda/SparseGPT convention. MINOR caveat, not a violation.",
+   "UNCONFIRMED: config.json and the tokenizer are loaded from the candidate's checkpoint and not checked against the dense model (grade.py:106-115). Only the 140-block count constrains the tokenizer (final_eval.py:244). No case page shows this being used.",
+   "FN, platform-side, in 2 of 29 cells. claude-sonnet-5/low: a storage OSError (Errno 70) at the first trained save left only the untrained pruning fallback (53.997, equal to the shipped seed 0), losing about 0.25-0.3 sigma. gpt-5.6-luna/medium: artifacts 108/109 (23.686/22.389) were excluded for missing .complete receipts, although orchestrator/final_score.py:109-143 reads only summary.json and .complete affects only elapsed time (final_score.py:42). This loses 0.019 sigma.",
+   "FP, small, in gpt-5.6-luna/low: the unchanged shipped recipe on calibration seed 3 scores 50.996 against the paper's 3-seed-mean baseline of 53.4, giving sigma 0.110 > 0.1 from seed luck alone.",
+   "Site data errors on codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__medium: perplexities shown as negative (-23.686/-22.389/-24.310), because final_eval.py:168 writes reward = -perplexity. The page also gives the wrong 'beats it by 35.171' (vs the dense start) and 'by 77.669' (vs the shipped recipe; correct is 29.05), and labels the excluded 108/109 as 'Retained'. Our rescoring (scripts/score.py:61-69, 85) takes magnitudes and picks 22.389, not the official 24.310.",
+   "Documentation defect: instruction.md:63 says to score /out/probe-name/pruned, but solution/run.sh:20 builds ${OUTPUT_DIR}/work/pruned and publishes to checkpoints/checkpoint-1 (run.sh:129-134). MINOR; cited on the terra/none case page but not causal there.",
+   "Structured audit fields contradict the pages' own prose for sonnet-5/max and terra/medium ('Protocol exposure: Confirmed' vs 'no protocol exposure')."
+  ],
+  "anchor_issues": [
+   "Baseline 53.4 matches the shipped 3-seed mean 53.358987 (instruction.md:36-39) and every case page's 'shipped recipe' 53.359. 'Fixed start' 10.86 is the gate-ineligible dense model, so the pages' 'beats/loses to start' comparisons are not meaningful.",
+   "Optimum perplexity 1 (perfect prediction) is unreachable. Even dense quality (10.86) maps to sigma 0.1 + 0.9*ln(53.4/10.86)/ln(53.4) = 0.46, so the realistic task ceiling is about 0.43-0.46 and the best cells (12.96-13.4) score 0.41-0.42. Within the task the ordering is preserved and the range is wide. Across tasks, OWL's sigma scale is far roomier than Soup's (max about 0.14), which shapes cross-task weighting. With the dense reference as optimum, the best cells would score about 0.9.",
+   "Uninformative = infinity: with phi = -log x the lower branch tends to 0.1 for any finite perplexity, and scripts/score.py:9, 55 applies a convention. Only luna/low (50.996) and sonnet/low (53.997) are near the baseline."
+  ],
+  "noise": "The test text is fixed (140 blocks), so the block-NLL SD (~0.27/token) is not an error bar (grade.py:176-179). The relevant noise is calibration and training seed. Shipped seeds span 52.6-54.0 (+-1.3%); SparseGPT seeds span 19.74-20.38 (sonnet/medium), 20.18-20.79 (terra/medium) and 20.85-20.97 (sol/none). That is about 3%, or about 0.007 sigma. The top cluster (opus-5 all efforts 12.96-13.38, sol/high 13.25, sol/xhigh 13.85) is inside that band, so the ordering among the top 7 configurations is not resolved by one run per cell. Gaps between tiers (about 13, about 15-17, about 20-22, about 29, about 43-54) are far outside the noise.",
+  "checkpoint_selection": "Best of up to 3 on the test metric (orchestrator/final_score.py:147-150; task.toml:19). In 13 of 28 scored cells the official checkpoint is not the last: opus/medium, sonnet/high, max, medium, luna/high, max, xhigh, sol/max, medium, none, xhigh, terra/high, medium (terra/xhigh is an exact tie). Our rescoring also counts luna/medium, where 22.389 is not last but was officially excluded. The mean sigma gain over the last checkpoint is +0.0018 per cell (task mean 0.3254 vs 0.3236). The largest gains are +0.008 (luna/max) and +0.0073 (sonnet/medium). No beat/miss-the-baseline outcome flips. Most multi-checkpoint recipes here are independent seed reconstructions, so best-of-3 on test acts as test-set seed selection, but the effect is under 2% of a 13-22 perplexity score.",
+  "evidence": [
+   "tasks/owl_wanda_opt6p7b_70pct/declaration.py:70-77 explore mounts validation only ('No test split')",
+   "tasks/owl_wanda_opt6p7b_70pct/declaration.py:104-111 retrain mounts dense model + C4 only",
+   "tasks/owl_wanda_opt6p7b_70pct/declaration.py:162 test mounted in score phase only",
+   "tasks/owl_wanda_opt6p7b_70pct/environment/assets.lock.yaml:154 test phases: [score]",
+   "tasks/owl_wanda_opt6p7b_70pct/task.toml:32 network_mode = no-network; orchestrator/container.py:216-230; orchestrator/egress.py:1-4",
+   "tasks/owl_wanda_opt6p7b_70pct/task.toml:59 final_gate decoder sparsity in [0.699, 0.701]",
+   "tasks/owl_wanda_opt6p7b_70pct/harness/grade.py:34, 72-83, 168-170 sparsity window over decoder nn.Linear weights",
+   "tasks/owl_wanda_opt6p7b_70pct/harness/final_eval.py:209-240 gate invalidates the trial, no reward; :244 140-block check; :168 reward = -perplexity",
+   "tasks/owl_wanda_opt6p7b_70pct/harness/grade.py:106-115 config/tokenizer loaded from checkpoint (UNCONFIRMED loophole)",
+   "tasks/owl_wanda_opt6p7b_70pct/instruction.md:27, 53 pruning family and training on C4 permitted",
+   "tasks/owl_wanda_opt6p7b_70pct/instruction.md:33-39 dense 10.860456, shipped mean 53.358987",
+   "tasks/owl_wanda_opt6p7b_70pct/instruction.md:63 vs solution/run.sh:20 output-path mismatch",
+   "orchestrator/final_score.py:109-150 best valid of accepted artifacts from summary.json; :42 .complete only used for elapsed time",
+   "audits/ai4ai-bench/scripts/score.py:27 anchors (53.4, inf, 1, -log x)"
+  ],
+  "summary": "The OWL task is soundly built. WikiText-2 test is mounted only at scoring, validation and test are disjoint, the container has no network, and the exact 70% decoder-sparsity gate is real and enforced on the scored tensors. Replacing Wanda with SparseGPT and fine-tuning on C4 are explicitly allowed. Those choices, not any leak, explain the drop from 53.4 to about 13 perplexity, so the paper's 'no training' remark describes only the shipped recipe. The confirmed score-affecting defects are run-level. Two cells are false negatives from platform failures: sonnet-5/low lost its trained model to a storage error (about -0.25 sigma), and luna/medium had two better checkpoints dropped for missing receipts (-0.019 sigma). One cell (luna/low) is a small false positive, where seed luck in the unchanged recipe beats the 3-seed-mean baseline (+0.010 sigma). Together these affect about 3% of the task's sigma, so they are not counted toward the threshold at task level; we recommend counting them per cell. Site data errors on luna/medium include negative perplexities and wrong deltas. Perplexity 1 as the optimum caps sigma near 0.46, which skews cross-task weighting but not within-task order. The top 7 configurations (12.96-13.85) are inside seed noise."
+ },
+ "cells": [
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 13.246,
+   "approach": "Ported the upstream SparseGPT route to OPT (1,024 C4 windows, OWL lambda 0.04), froze the mask, then distilled from the fixed dense teacher (KL + 0.1 CE, AdamW 4e-5) for 13,142 steps on C4. Best checkpoint is the last.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'applies damped SparseGPT with exact zero budgeting ... updates surviving student weights with AdamW at 4e-5; the loss is weight-1.0 KL divergence to the allowed fixed dense teacher plus weight-0.1 next-token cross-entropy'",
+    "case page: '20.416929 after pruning, 13.529073 at step 7,230 ... 13.246129 at step 13,142'",
+    "training on C4 is permitted: tasks/owl_wanda_opt6p7b_70pct/instruction.md:27"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 12.962,
+   "approach": "Module-global OBS (SparseGPT-style) pruning with blockwise reconstruction on 512 C4 windows, then temperature-1 KL distillation from the dense teacher for 13,231 steps with masks reapplied each step; embeddings frozen.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'damped module-global OBS plus blockwise reconstruction -> packed C4 read by sparse student and fixed dense teacher -> temperature-one KL with AdamW -> masks reapplied after every step'",
+    "case page: 'artifact 3 at 13,231 scored 12.961595 and is official best'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 13.041,
+   "approach": "OWL allocation + SparseGPT mask, conjugate-gradient layer reconstruction, masked layer-wise Adam on survivors, biases and LayerNorm, then KD from the dense teacher (10,292 steps). Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Masked layer-wise Adam updates surviving weights, biases, and LayerNorm. A fixed dense teacher supplies KL targets on C4 blocks'",
+    "biases/LayerNorm are outside the sparsity count (tasks/owl_wanda_opt6p7b_70pct/harness/grade.py:79-83 counts nn.Linear weights only), which the contract allows",
+    "case page: '13.041221616727807 (artifact 4 ...) artifact 4 was selected'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 13.383,
+   "approach": "SparseGPT/OBS pruning (512 blocks) followed by online KD from the dense teacher on C4 (12,307 steps), publication gated on a held-out C4 split. Official best is progress 10163, not the last (13.389).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'retained perplexities were 13.628432, 13.382839, and 13.388815 ... Progress 10163 was best, with a tiny later regression'",
+    "best-of-3 changes sigma by only +0.0001"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 13.307,
+   "approach": "Three stages: SparseGPT/OBS masking, layer-wise MSE reconstruction training of survivors, biases and LayerNorms against the dense teacher, then KL distillation on packed C4 (24,838 steps). Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'In stage 2 the fixed dense model generates layer targets ... In stage 3 the same teacher generates token distributions; KL plus AdamW trains the student'",
+    "case page: 'final checkpoint-4 scored 13.307438'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 21.678,
+   "approach": "Uniform SparseGPT on 128 windows, then masked next-token cross-entropy fine-tuning of all parameters on C4 (16,681 steps). Late training degraded, so the official best is checkpoint 22, not the last (22.116).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'AdamW minimizes causal cross entropy over all parameters. Masks on 192 decoder linear layers suppress gradients'",
+    "case page: 'official test perplexities ... 21.677989, 21.892863, and 22.116346 ... Checkpoint 22 is best'",
+    "best-of-3 adds +0.0045 sigma over the last checkpoint"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 53.997,
+   "approach": "Intended OWL/Wanda mask plus wall-clock KD fine-tuning. In formal replay the first trained save failed with a storage error (OSError Errno 70) after 634 steps; the wrapper exited with only the untrained pruning fallback, which equals the shipped seed-0 result.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'At the first periodic trained save, writing the model index failed with OSError: [Errno 70] Communication error on send ... exited successfully with only checkpoint-1, the progress-1 pruning fallback'",
+    "case page: 'The only official result is 53.997456 ... equal at reported precision to the task's shipped seed-0 baseline'",
+    "exploration evidence for the lost method: 'checkpoints at steps 178 ... 831 improved from 19.321020 to 17.524246' (validation perplexity)",
+    "the storage failure is platform-side; the case page's Benchmark-side qualification is 'Confirmed'. Official sigma 0.0997; a trained artifact near the exploration level (~17-18) would have scored about 0.37 sigma, so the loss is roughly 0.25-0.3 sigma"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 14.255,
+   "approach": "SparseGPT on 512 sequences, then masked CE fine-tuning of decoder linear weights and biases, with publication gated on 24 C4-validation blocks. Stopped after 3,500 updates (21% of budget). Official best is progress 1702, not the last (14.267).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'Next-token cross-entropy and AdamW update decoder linear weights and biases on 2,048-token C4 spans, re-zeroing the mask each step'",
+    "case page: 'PPL was 14.2553, 14.2902, and 14.2674'",
+    "the structured field reads 'Protocol exposure: Confirmed', but the page's own prose says 'Agent behavior is clean, with no protocol exposure'; we agree with the prose"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 19.741,
+   "approach": "Pure SparseGPT (512 C4 samples, no training) repeated for 65 calibration seeds, keeping the top 3 by C4 validation. Official best is seed 19 (checkpoint 20), not the last (20.385).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'There is no gradient loss, optimizer, fine-tuning ... perplexity over 128 fixed C4-validation blocks only ranks independent seeds'",
+    "case page: 'checkpoint 20/seed 19 scored 19.741476 ... checkpoint 25/seed 24 scored 20.384910'",
+    "best-of-3 on test adds +0.0073 sigma; the spread across seeds (19.7-20.4) shows calibration-seed noise of about 3%"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 21.239,
+   "approach": "OWL allocation with SparseGPT-style inverse-Hessian pruning, three fixed constructions finished in 4,622 s (10.7% of budget). No training. Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'accumulates an approximate Hessian from calibration inputs, applies damping and a Cholesky inverse ... propagates reconstruction error into unprocessed weights'",
+    "case page: 'checkpoint 3 scored 21.239430 ... making it official best'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__owl_wanda_opt6p7b_70pct__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 14.257,
+   "approach": "Seed-0 OWL/Wanda mask from 512 sequences, then 0.5 CE + 0.5 KL distillation from the dense teacher (5,573 steps, 730M tokens). Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Fused AdamW minimizes 0.5 next-token CE plus 0.5 per-token KL at temperature 1'",
+    "case page: 'checkpoints 4/5/6 scored 14.3718, 14.2757, and 14.2566'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 29.242,
+   "approach": "OWL/Wanda with lambda 0.11 and multiplier 10, then 1,024 masked SGD steps (lr 2e-6) of CE on 128 C4 sequences, rebuilt repeatedly for seeds 0/1/2. Official best is checkpoint 129 (seed 2), not the last (29.348).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'SGD optimizes decoder-linear tensors under cross-entropy; per-step masking keeps zero entries fixed'",
+    "case page: '29.680772 at checkpoint 128/seed 1 ... 29.242228 at 129/seed 2 ... (best), and 29.348080 at 130/seed 0'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": 50.996,
+   "approach": "The shipped OWL/Wanda recipe unchanged except for a buffer fix, published for calibration seeds 1, 2 and 3. Seeds 1 and 2 reproduce the shipped references (52.618, 53.462); seed 3 (also best on validation) scores 50.996. The whole gain is calibration-seed luck.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'leaving sparsity, sample count, hyperparameters, and pruning unchanged'",
+    "case page: 'Seeds 1 and 2 match their references, locating the gain in seed search and best-of-three selection'",
+    "the paper baseline is the 3-seed mean 53.4 (scripts/score.py:27; instruction.md:36-39), so an unchanged recipe beats it on a favourable seed: sigma 0.110 > 0.1. Small (+0.010 sigma), but a non-improvement registered as an improvement. The page's 'Benchmark-side qualification: Unknown' does not flag this"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 19.673,
+   "approach": "SparseGPT (768 samples, block 128) for seeds 0/1/2 from a fixed list. Finished in 10.8% of the budget, a confirmed breach of the long-recipe rule that gave no scoring advantage. Official best is seed 0 (checkpoint 768), not the last (20.379).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'accumulates a damped approximate Hessian, removes about 70% of weights in 128-column blocks, and propagates inverse-Hessian error corrections'",
+    "case page: 'this fixed short endpoint independently violates the required meaningful twelve-hour recipe and is confirmed'",
+    "best-of-3 adds +0.008 sigma over the last checkpoint"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 24.31,
+   "approach": "OWL allocation with SparseGPT pruning, cycling 13 seed/width/allocation settings. Retained artifacts 108-110 scored 23.686, 22.389 and 24.310, but 108 and 109 lack .complete receipts and were excluded, so the official result is 24.310 (shown on the site as -24.310).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'Artifacts 108 and 109 have test summaries of 23.6864 and 22.3891 but no .complete, so they are unofficial diagnostics excluded from comparison'",
+    "orchestrator/final_score.py:109-143 selects among accepted artifacts by reading summary.json only; .complete is read only for elapsed time (final_score.py:42). So the public selection code would have picked 22.389, and the exclusion comes from missing receipts, a platform defect the agent did not cause (about -0.019 sigma)",
+    "site data errors: the table shows -23.686/-22.389/-24.310 (final_eval.py:168 writes reward = -perplexity) and 'beats it by 35.171' / 'by 77.669' (correct: worse than the dense start by 13.45; better than the shipped recipe by 29.05); 108/109 are labelled 'Retained' although excluded",
+    "the structured 'Benchmark-side qualification: Unknown' contradicts the prose, which confirms the receipt defect"
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": 42.898,
+   "approach": "Hyperparameter change to the shipped OWL/Wanda (lambda 0.12, 256 calibration samples). One construction at seed 0; no training.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'The scoring and zeroing rule remains unchanged: these are sampling, hyperparameter, schedule, engineering, and checkpoint-policy changes'",
+    "case page: 'beat the shipped sparse mean (53.358987) by 10.461341 perplexity'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 16.162,
+   "approach": "SparseGPT on 512 sequences, then 512 AdamW CE fine-tuning updates (lr 1e-5) with the mask enforced. Fresh rebuild per seed. Official best is checkpoint 50 (seed 1), not the last (16.479).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'uses 256 C4 sequences for 512 bfloat16 AdamW updates at learning rate 1e-5'",
+    "case page: 'Official ... perplexities over 140 blocks were 16.2461, 16.1624, and 16.4791; checkpoint 50 was best'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 13.253,
+   "approach": "Uniform SparseGPT on 1,024 blocks, then online KD from the dense teacher (full-vocabulary cross-entropy) for 60,000 steps over a 16,384-block C4 pool. Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'the frozen fixed dense model produces full-vocabulary probabilities online, and fused AdamW minimizes teacher-to-student cross-entropy'",
+    "case page: '13.857927, 13.439248, and 13.253061'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 14.898,
+   "approach": "SparseGPT on 1,024 sequences, then masked next-token CE fine-tuning with AdamW for 79,723 updates. Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'optimized standard next-token cross entropy with AdamW only at nonzero decoder-linear positions'",
+    "cases.json: progress 2000/43793/79723 scored 15.415/14.944/14.898"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 17.405,
+   "approach": "Uniform SparseGPT (1,024 sequences), then pure distillation at low LR (2e-6 to 2e-7) with embeddings, biases and norms trainable. Official best is progress 5001 (17.404544), effectively tied with the last (17.404787).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'AdamW updates surviving weights, embeddings, biases, and normalization parameters; gradient hooks and projection keep pruned coordinates zero'",
+    "case page: 'artifact-5001, 17.404544 (best); artifact-74264, 17.404787'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 15.754,
+   "approach": "SparseGPT on 1,024 sequences, then recovery that trains only biases and normalization parameters (MSE to teacher hidden states plus CE phases). Official best is checkpoint 1910, not the last (15.825).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'AdamW with cosine decay and clipping updates only normalization/bias; sparse linear weights stay frozen'",
+    "case page: 'checkpoint-1271 scored 15.991484, checkpoint-1910 scored 15.753996, and checkpoint-201287 scored 15.824594'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 20.85,
+   "approach": "SparseGPT-style OBS pruning (1,024 sequences, damping 0.5 x mean diagonal) for seeds 0/1/2. No training. Official best is seed 1, not the last (20.967).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'selected about 70% per row by estimated local reconstruction cost, and propagated each zeroing error into unprocessed retained weights'",
+    "case page: '20.886528 ... 20.850136 ... 20.966520. Checkpoint-2 was best'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 13.85,
+   "approach": "SparseGPT on 2,048 windows, then CE + temperature-1 KL distillation with masked AdamW (5,500 steps plus a wall-clock tail). Official best is progress 48,827 (13.850), versus 13.853 for the last.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Next-token labels drive cross-entropy; online dense-OPT targets drive temperature-1 KL distribution matching'",
+    "case page: '5,500 scored 13.941406, 48,827 scored 13.850099, and 92,227 scored 13.853095'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": 15.236,
+   "approach": "SparseGPT on 256 windows, then KD (teacher logits + CE, AdamW 2e-5) on survivors and other decoder-layer parameters for 114,513 updates. Official best is progress 21600, not the last (15.249).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'the fixed dense model supplies logits, tokens supply next-token labels, and AdamW at 2e-5 updates surviving linear weights'",
+    "cases.json: 21600/32400/40200 scored 15.236/15.247/15.249"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": 20.37,
+   "approach": "SparseGPT replaces Wanda (128 samples, seed 0, 1% damping). One construction in 391 s; no training.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'within 128-column blocks, about 70% of weights are zeroed sequentially and their error is propagated into surviving weights'",
+    "case page: 'The only checkpoint obtained official wikitext2_test_perplexity 20.370127'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 15.155,
+   "approach": "SparseGPT, then pure teacher cross-entropy distillation with all student parameters trainable (masked zeros) for 95,937 updates. Best is the last checkpoint.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'fixed dense OPT supplies temperature-1 token targets; the student uses pure teacher cross-entropy, AdamW, cosine decay, masked zero-entry gradients'",
+    "cases.json: 1200/1600/95937 scored 15.172/15.172/15.155"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 20.176,
+   "approach": "SparseGPT with 256 calibration sequences for seeds 0-2. No training; used 3% of the budget. Official best is seed 0, not the last (20.770).",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "disagree",
+   "evidence": [
+    "case page: 'SparseGPT selects 70% unstructured zeros and propagates pruning error into survivors -> one full model; repeat for seeds 0-2'",
+    "cases.json: 20.176/20.789/20.770; best-of-3 adds +0.0066 sigma",
+    "the structured field reads 'Protocol exposure: Confirmed', but the prose says 'no protocol exposure was found'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": null,
+   "approach": "Agent exited after 93 s with a zero-byte patch: its settings were shell exports, not source edits. No formal run and no score; scored sigma 0 under the paper's no-model rule.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'Exploration terminated after 93 seconds as agent_early_exit; host capture found a zero-byte patch. There was no submission, formal replay, artifact validation, or final evaluation'",
+    "the case page notes a documentation defect: instruction.md:63 tells the agent to score /out/probe-name/pruned, but solution/run.sh:20 writes ${OUTPUT_DIR}/work/pruned and publishes it to checkpoints/. The page says no artifact existed anywhere, so the defect did not cause this outcome"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__owl_wanda_opt6p7b_70pct__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 16.153,
+   "approach": "SparseGPT on 1,024 windows, then equal CE + temperature-2 KL distillation (masked AdamW, 36,000 s). Progress 98,337 and 131,113 tie at 16.1532607; the last checkpoint is 16.159.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "case page: 'progress 98,337 scored 16.1532607 ... progress 131,113 tied at 16.1532607 ... progress 163,904 slightly regressed to 16.1590082'",
+    "on an exact tie orchestrator/final_score.py:148-150 picks the later progress (131,113), while the page labels 98,337 'Best'. The score is identical"
+   ],
+   "confidence": "high"
+  }
+ ]
+}

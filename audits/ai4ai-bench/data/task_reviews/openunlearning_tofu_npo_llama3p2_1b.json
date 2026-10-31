@@ -1,0 +1,535 @@
+{
+ "task": "openunlearning_tofu_npo_llama3p2_1b",
+ "task_level": {
+  "rubric_code": "FN",
+  "confirmed": true,
+  "counted_toward_threshold": true,
+  "hidden_data_integrity": [
+   "Final data is mounted only in the score phase: explore/retrain mount training_start + data/train only (declaration.py:12-50); score adds models/retain_reference and data/final (declaration.py:70-72; assets.lock.yaml:42-59, 73-91). network_mode = no-network (task.toml:32).",
+   "By design the final forget/retain rows overlap training: forget10.json and retain90.json in data/final have the same hashes as data/train (assets.lock.yaml:71-72 vs 83,85), and the forget metrics read forget10_perturbed.json, which carries the forget10 questions (final_eval.py:160-172). This is inherent to TOFU unlearning, not a leak. MU also scores retain_perturbed.json, which per the TOFU design is drawn from the retain set the agent trains on (UNCONFIRMED offline: file contents not available); real_authors/world_facts/holdout are evaluator-only.",
+   "The evaluator-only retain90 anchor fixes the Extraction normalisation denominator (final_eval.py:201-210), so agents cannot know the forgetting clip point; kimi-k3/max says it used 'an assumed retain-reference Extraction value'. This blinds tuning but leaks nothing.",
+   "TOFU is public (MIT), but memorising it does not help an unlearning-by-fine-tuning task with no network."
+  ],
+  "scorer_issues": [
+   "The headline composite is bounded in [0,1]: forget_progress = clip01((ES_start - ES_cand)/(ES_start - ES_retain90)) and utility_retention = clip01(MU_cand/MU_start), combined by harmonic mean (final_eval.py:192-221; formula string final_eval.py:470-472; instruction.md:23). It saturates: once candidate Extraction is at or below retain90's, extra forgetting earns nothing, and MU at or above the start MU earns nothing. 6/29 cells (claude-opus-5 high/max/medium/xhigh, gpt-5.6-sol xhigh; opus/low 0.996) sit at or near the ceiling, so the top of the leaderboard cannot be separated.",
+   "Gaming checks. (a) Destroying the model gives MU -> 0 and so a composite of 0; not gameable that way. (b) Teaching a refusal or other format on forget questions is a recognised unlearning strategy (IdK) and is not forbidden. (c) The candidate's tokenizer and chat template are loaded in the scoring path (final_eval.py:284-285, model.tokenizer_args path = candidate) and are not hash-checked; only the weights digest is compared, and only against the start (final_eval.py:377-380). This is a latent manipulation surface. No case page reports using it (UNCONFIRMED exploitation).",
+   "Proxy mismatch, confirmed. tasks/README.md:20-22 and instruction.md:25 say the exploration value is 'a training diagnostic, not a smaller version of the native final'. fast_eval.py:137-138 rewards forget answer-NLL increase without bound, minus max(0, retain-NLL increase), on only 24 train rows per split (fast_eval.py:15, 86-87). The final instead caps forgetting at retain90's ES and adds real-author/world-fact utility. Agents optimise partly blind; most built their own Extraction/ROUGE proxies on train-role data.",
+   "Noise lets a null patch pass. gpt-5.6-terra/xhigh replayed the shipped recipe unchanged (its one hunk was skipped) and scored 0.9228. The paper baseline is 0.887, derived from the shipped components (instruction.md:35-36: Extraction 0.063436, MU 0.478673); the replay had Extraction 0.0643, MU 0.5150. So an unchanged recipe gets sigma 0.127 > 0.1."
+  ],
+  "anchor_issues": [
+   "The optimum is unreachable. The paper's Table 2 anchors are baseline 0.887, uninformative 0, optimum 2.08 (scripts/score.py:24), but the declared final metric cannot exceed 1.0 (final_eval.py:207-214). The highest attainable sigma is therefore 0.1 + 0.9*(1-0.887)/(2.08-0.887) = 0.185, and cells that reach the composite's true optimum (1.0) get 0.185 instead of 1.0. With optimum 1.0, a 0.95 cell would get sigma about 0.60 instead of 0.148: every above-baseline cell is under-scored by a factor of about 4. Confirmed, score-changing, affects >20% of this task's score.",
+   "The baseline 0.887 is the composite of the shipped components (sol/low case page: 'report-author-derived supplied-NPO balanced score is about 0.88732'). The case pages report fixed_start = shipped_recipe = null ('No scalar start or shipped-recipe reference is defined'). The unchanged-recipe replay scored 0.9228, so the anchor sits about 0.036 below what the shipped recipe actually gets in formal replay.",
+   "The uninformative point 0 is reachable by a broken model (MU -> 0), which is fine."
+  ],
+  "noise": "No stderr is reported for any checkpoint (cases.json se=null). Final n is fixed: 400 forget, 400 retain, 100 real-author and 117 world-fact items (case pages). The only replicate evidence is the identical shipped recipe measured twice: 0.887 (task reference) vs 0.9228 (terra/xhigh replay, MU 0.4787 vs 0.5150). Checkpoints in the same run differ by up to 0.16 (terra/none 0.7104 vs 0.5493). Gaps below about 0.04-0.07 in composite (about 0.03-0.05 sigma) are inside the noise. That covers most of the 0.93-1.0 cluster (21 cells), so between-configuration ordering there is not meaningful.",
+  "checkpoint_selection": "Of 28 scored cells, 17 report a checkpoint whose score differs from the last checkpoint. Best-of-3 minus last is +0.0056 sigma on the task mean (0.1456 vs 0.1400). One beat/miss flip: terra/medium, 0.9045 -> 0.8673. Selection uses the final metric on the final data (orchestrator/final_score.py:143-148), so the reported score is optimistically biased by roughly the within-run checkpoint spread. It does not change any qualitative conclusion here.",
+  "evidence": [
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/harness/final_eval.py:192-221 balanced_score: clip01 on both components, then harmonic mean (max 1.0)",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/harness/final_eval.py:470-472 provenance string 'harmonic_mean(clip(...),0,1), clip(candidate_MU/start_MU,0,1))'",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/harness/final_eval.py:284-285 candidate path used for both model and tokenizer",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/harness/final_eval.py:377-380 only weights digest checked (vs start)",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/harness/fast_eval.py:137-138 proxy = forget NLL delta - max(0, retain NLL delta)",
+   "einsia/ai4ai-bench/tasks/README.md:20-22 'The NPO exploration value is a training diagnostic, not a smaller version of the native final'",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/instruction.md:23-27 composite definition, diagnostic disclaimer, phase mounts",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/instruction.md:33-36 shipped Extraction 0.063436 / MU 0.478673 (composite about 0.887)",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/declaration.py:12-78 explore/retrain mounts exclude retain_reference and data/final",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/environment/assets.lock.yaml:61-91 train vs final file lists and hashes",
+   "einsia/ai4ai-bench/tasks/openunlearning_tofu_npo_llama3p2_1b/task.toml:32 network_mode = no-network",
+   "audits/ai4ai-bench/scripts/score.py:24 anchors (0.887, 0, 2.08)",
+   "case page codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-terra__xhigh: 'baseline replay with balanced_unlearning_score=0.922799'",
+   "case page claude__openunlearning_tofu_npo_llama3p2_1b__claude-opus-5__high: '15673: 1.0 (Extraction 0.043207, MU 0.598514)'"
+  ],
+  "summary": "The scorer runs the pinned OpenUnlearning evaluator, and hidden data stays isolated as declared. The defect is in the anchors. The local balanced composite is clipped and harmonic-meaned into [0,1], so the paper's optimum 2.08 is unreachable: sigma tops out at 0.185, and the six cells that hit the composite's true ceiling of 1.0 are scored as if they had covered 7.5% of the distance to the optimum. All 19 clearly improved cells are under-scored by about 4x, so this is FN, confirmed and counted. Secondary issues: the composite saturates, so the top cells are tied; an unchanged-recipe replay scores 0.9228 > baseline 0.887, so noise lets null patches earn sigma about 0.127; the visible proxy is a misaligned unbounded NLL diagnostic; and the candidate tokenizer/chat template is trusted unhashed by the scorer (latent, not observed)."
+ },
+ "cells": [
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 1.0,
+   "sigma_best": 0.1852,
+   "approach": "Fresh-start wall-clock search over seven NPO forget arms alternated with low-LR joint repair and retain-only NLL repair, accept/rollback on a custom train-role Extraction/ROUGE proxy; checkpoint 15673 Extraction 0.0432, MU 0.5985.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Results were 15673: 1.0 (Extraction 0.043207, MU 0.598514)'",
+    "Composite is at its hard ceiling of 1.0 (final_eval.py:207-214 clips both components to [0,1]); the paper's optimum 2.08 (scripts/score.py:24) maps this to sigma 0.185 instead of 1.0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 0.996,
+   "sigma_best": 0.1822,
+   "approach": "NPO plus retain NLL and anchor KL repair with guarded gold-vs-alternative logit hinge tails late in a wall-clock schedule.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'The submission added retain NLL/anchor-KL repair and guarded extraction-hinge tails.'",
+    "Single checkpoint 0.996, at the composite ceiling region; sigma 0.182."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 1.0,
+   "sigma_best": 0.1852,
+   "approach": "Bounded threshold-hinge objective (forget NLL hinge, retain NLL, KL(anchor||policy)) with a 19-point grid refined around the top three; publishes composite-best, low-KL and lowest-Extraction models.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'submitted a bounded-hinge objective and an anytime multi-c[andidate]...'",
+    "Composite is at its hard ceiling of 1.0 (final_eval.py:207-214 clips both components to [0,1]); the paper's optimum 2.08 (scripts/score.py:24) maps this to sigma 0.185 instead of 1.0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 1.0,
+   "sigma_best": 0.1852,
+   "approach": "20-stage unlearn-then-repair: NPO / SimNPO / uniform-target entropy forgetting followed by retain NLL plus frozen-start KL repair, with ratio/Extraction filters for export.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'two formal exports reached the official balanced-score ce[iling]'",
+    "Composite is at its hard ceiling of 1.0 (final_eval.py:207-214 clips both components to [0,1]); the paper's optimum 2.08 (scripts/score.py:24) maps this to sigma 0.185 instead of 1.0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 1.0,
+   "sigma_best": 0.1852,
+   "approach": "ANPO: length-normalised NPO plus optional retain-distribution KL, three independent branches from the fixed start.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'The agent submitted ANPO, adding optional retain-distribution KL and length-normalized NPO, and formal replay produced a best score of 1.0.'",
+    "Composite is at its hard ceiling of 1.0 (final_eval.py:207-214 clips both components to [0,1]); the paper's optimum 2.08 (scripts/score.py:24) maps this to sigma 0.185 instead of 1.0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 0.7286,
+   "sigma_best": 0.0821,
+   "approach": "Unchanged NPO with retain weight 6 and wall-clock-long constant training; utility/forgetting balance degraded.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.7286 < shipped 0.887; sigma 0.082 (<0.1) is consistent with a regression."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 0.9685,
+   "sigma_best": 0.1615,
+   "approach": "Unchanged NPO with 10% warmup then constant LR, 240 nominal epochs and wall-clock stop; schedule tuning only.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'This is schedule, hyperparameter, checkpoint-policy, and engineering tuning'",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 0.9436,
+   "sigma_best": 0.1427,
+   "approach": "Unchanged NPO with retain weight alpha=8 and a 600-epoch requested schedule; hyperparameter change.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Best formal progress 540 scored 0.943617.'",
+    "Composite is above the paper baseline 0.887 but within ~2x of the shipped-vs-replay gap (0.887 vs 0.9228 for the identical recipe, terra/xhigh), so the beat-baseline credit is not distinguishable from noise."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 0.969,
+   "sigma_best": 0.1619,
+   "approach": "Unchanged NPO update with a 250-epoch requested schedule and safer checkpoint/export engineering.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'formal step 2500 achieved the best balanced_unlearning_score, 0.968968'",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 0.9628,
+   "sigma_best": 0.1572,
+   "approach": "Unchanged NPO with retain coefficient 3, one warmup epoch then LR decay, wall-clock stop and 100-step saves.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.9628; case page: 'It changes hyperparameters, schedule, engineering, and checkpoint policy\u2014not the algorithm'",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 0.988,
+   "sigma_best": 0.1762,
+   "approach": "Unchanged NPO with beta 0.05, retain weight 1.5 and 30 epochs (KL/alpha-schedule code present but inactive).",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'changed beta from 0.1 to 0.05 and constant retain weight from 1.0 to 1.5, and requested 30 rather than 10 epochs; its best official score was 0.9880092363'",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": null,
+   "sigma_best": 0.0,
+   "approach": "Unchanged loss with 10->20 epochs and an output-directory change; formal run did not reach an official score.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "cases.json status 'Terminal', no checkpoint scores; sigma 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 0.9275,
+   "sigma_best": 0.1306,
+   "approach": "Replaced NPO with layer-7 representation misdirection (RMU): random-direction MSE on forget activations plus retain-activation MSE.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'submitted layer-7 representation misdirection for unlearning (RMU). Its best official checkpoint scored 0.927461'",
+    "Composite is above the paper baseline 0.887 but within ~2x of the shipped-vs-replay gap (0.887 vs 0.9228 for the identical recipe, terra/xhigh), so the beat-baseline credit is not distinguishable from noise."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 0.7373,
+   "sigma_best": 0.0831,
+   "approach": "Reference-free SimNPO with retain weight alpha=2.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.7373 < 0.887; sigma 0.083.",
+    "Benchmark 'Confirmed' exposure/qualification fields; page text: 'No hidden-value exposure or use was found.' - nothing score-affecting."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": 0.9359,
+   "sigma_best": 0.1369,
+   "approach": "Unchanged NPO with a wall-clock 1,000-epoch ceiling, per-epoch saving and export fixes.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Formal checkpoint 893 scored 0.935859'",
+    "Composite is above the paper baseline 0.887 but within ~2x of the shipped-vs-replay gap (0.887 vs 0.9228 for the identical recipe, terra/xhigh), so the beat-baseline credit is not distinguishable from noise."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 0.951,
+   "sigma_best": 0.1483,
+   "approach": "Retain-anchored NPO (iterate retain90, random forget pairing), alpha 2, beta 0.05, 80 epochs.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.951 at progress 70.",
+    "Just above 2x the replay gap; anchor compression still applies (sigma 0.148)."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 0.9659,
+   "sigma_best": 0.1595,
+   "approach": "Multi-seed, higher-LR wall-clock search over alpha/beta/LR with unchanged NPO; three safe-leader frontiers on a 96-row diagnostic.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.9659; case page: 'the changes are hyperparameter, schedule, engineering'",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 0.7422,
+   "sigma_best": 0.0837,
+   "approach": "Unchanged NPO with retain weight 8 and long wall-clock training.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'its best official balanced score was 0.74223, below the supplied NPO comparison'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 0.9827,
+   "sigma_best": 0.1722,
+   "approach": "Retain-anchored SimNPO (beta 1, saturating) plus retain NLL; three gamma settings trained independently.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.9827.",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 0.9929,
+   "sigma_best": 0.1799,
+   "approach": "Unchanged NPO with retain-anchored sampling, alpha 4, 448-step cycles; publications at 448/896/7168.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'step 896 achieved official balanced_unlearning_score 0.9929093885'",
+    "Best (896) is not the last checkpoint (7168: 0.9276).",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 0.9772,
+   "sigma_best": 0.168,
+   "approach": "Token-normalised NPO (beta 1) plus start-relative retain KL weight 3.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.9772.",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 1.0,
+   "sigma_best": 0.1852,
+   "approach": "Replaced NPO with weighted gradient ascent (WGA) plus retain cross-entropy and anchor KL; three-niche selection.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "All three checkpoints 1.0.",
+    "Composite is at its hard ceiling of 1.0 (final_eval.py:207-214 clips both components to [0,1]); the paper's optimum 2.08 (scripts/score.py:24) maps this to sigma 0.185 instead of 1.0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": 0.9922,
+   "sigma_best": 0.1794,
+   "approach": "Retain-anchored NPO with retain weight 2, twelve 8-epoch seeds, late-checkpoint publication.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'epoch 6 achieved official balanced_unlearning_score=0.992165'",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": 0.9521,
+   "sigma_best": 0.1491,
+   "approach": "Unchanged NPO under long wall-clock training (10->1,000 epoch ceiling).",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Its best official balanced_unlearning_score was 0.952111 at progress 500.'"
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 0.9538,
+   "sigma_best": 0.1504,
+   "approach": "Retain-anchored NPO, alpha 3, LR 1.25e-6, 12,000-step request.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.9538."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 0.9045,
+   "sigma_best": 0.1132,
+   "approach": "Reference-free SimNPO with saturating forget-NLL target (delta 5) and equal retain NLL.",
+   "classification": "no_gain",
+   "novelty": "known_technique",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.9045 > paper baseline 0.887 (sigma 0.113) but below the unchanged-recipe replay 0.9228 (terra/xhigh), so beat-baseline credit is noise.",
+    "Flips to below baseline under the last checkpoint (0.8673)."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": 0.7104,
+   "sigma_best": 0.0801,
+   "approach": "Unchanged NPO dynamics with wall-clock-long training and latest-three retention.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 0.7104 < 0.887."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__openunlearning_tofu_npo_llama3p2_1b__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 0.9228,
+   "sigma_best": 0.127,
+   "approach": "No effective change: the only patch hunk deleted a bytecode cache and was skipped, so formal replay ran the shipped recipe.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'the official best was therefore a baseline replay with balanced_unlearning_score=0.922799, not an agent-discovered improvement.'",
+    "sigma 0.127 > 0.1: an unchanged recipe is credited as beating the paper baseline 0.887 (shipped components MU 0.478673 vs replay MU 0.515030)."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "claude__openunlearning_tofu_npo_llama3p2_1b__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 0.9815,
+   "sigma_best": 0.1713,
+   "approach": "Longer cosine schedules and a multi-seed NPO/SimNPO/freezing portfolio, with proxy-selected snapshots; best Extraction 0.0551, MU 0.5755.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "false_negative",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Best final score was 0.981532, with Extraction 0.055083 and MU 0.575475\u2014both better than shipped NPO.'",
+    "Benchmark marks Protocol exposure 'Confirmed' but text says 'No hidden value was exposed; an estimated retain-reference value only risks proxy calibration' - consistent with our reading.",
+    "Composite clearly above the shipped value 0.887 and the unchanged-recipe replay 0.9228 (terra/xhigh); the unreachable 2.08 optimum compresses its sigma to <=0.185."
+   ],
+   "confidence": "medium"
+  }
+ ]
+}

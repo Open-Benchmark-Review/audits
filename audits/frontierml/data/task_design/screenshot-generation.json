@@ -1,0 +1,84 @@
+{
+  "task": "screenshot-generation",
+  "fairness_verdict": "minor_issues",
+  "verdict_rationale": "Well-specified, fully disclosed metric with sensible measured anchors and 200 shared held-out pages. The published score is mostly a stochastic single-digit gpt-6-luna rating, anchored on single runs. Self-check cannot see content, so a renderer that silently fails on the grader scores 0.",
+  "noise_se_points": 2.0,
+  "floor": "0 = 0.5368, the organiser Compositor: PIL text in each box on a white page, which already gets T 0.987 and L 0.961 (task.yaml:46-49; pipeline/baselines/methods.py:76-88). This is sensible: it is the trivial 'text paste' strategy the metric is built to beat. A blank page or a broken renderer scores far below it and is clamped to 0 (Fable 3yw6ax raw 0.214).",
+  "ceiling": "1 = 0.9543, the real reference screenshots through the same pipeline: T 1.000, L 0.980, F 0.994, R 0.917 (task.yaml:49-52). Not binding: best 78.9 (Opus 5q5wft, raw 0.866). Judge-optimised synthetic images could in principle beat real screenshots on R, but the score is clamped at 100.",
+  "usable_range": "observed 0-78.9 (57 runs; 8 zeros). Most nonzero runs are 15-79.",
+  "feasible_at_10": "yes: Opus q6eopv scored 74.2 spending $8.55. Many procedural renderers with about $0 compute score about 30. Preinstalled torch/diffusers (CONTRACT.md:31) lowers the packaging cost.",
+  "budget_scaling": "None on average. The 19-model mean is 29.7 / 26.2 / 32.4 at $10/$50/$200, and the medians are 31.1 / 21.6 / 35.0. Approach family decides the score (blog: LoRA diffusion 61, LLM-written renderer 38, off-the-shelf diffusion 33, procedural 20).",
+  "selfcheck_fidelity": "It runs 20 sequential public requests against a pro-rated share of the 7,200 s budget, with p95 latency, failure limit and PNG validity checked (verifier.py:173-178, 228-301). It runs no OCR, judge or review (verifier.py:22-23 'no OCR, judge or review'). So a server that returns valid but textless PNGs passes every self-check and scores 0 after clamping. Fable 3yw6ax: self-check pass, public dev score 0.756, graded raw 0.214, 0 invalid images. A sibling Fable run found Chromium crashing in the grading sandbox (3uz0o0 memory note). The latency gates match grading's, timed inside the sandbox.",
+  "judge": "gpt-6-luna (OpenAI), two calls per image (realism; faithfulness with description). Each call is a single digit 0-9, divided by 9 (screenshot_generation.py:89-109, 498-512). Default temperature only, with 'seed': 0 for best-effort determinism (screenshot_generation.py:66-68, 80). So grading is not deterministic. An agent measured about +/-0.03 on (F+R)/2 per 25-sample rerun (Fable 3uz0o0 note), roughly 1-1.5 points on 200 images. The prompts and request are exactly those in the shipped validator, and the Spin proxy accepts them (screenshot_generation.py:68-72), so dev and grading judges match. T and L saturate with exact text compositing, so the 0-100 range is mostly judged F and R.",
+  "neutrality": "The OpenAI judge is reachable by all via Spin. Faithfulness descriptions were drafted by Qwen3.6-27B (pipeline/internal/source.json:6), which slightly favours planners that share Qwen's vocabulary. Not material. GPT-6 Astra's Codex harness has an 'imagegen' skill outside the wallet that could produce assets for free. It was not used in any audited trial (audit), and the rules do not address it. The specialist-generator ban (review.py:28-43) is clear and was applied evenly.",
+  "reference_solution": "solution/ is the shared smoke fixture: it returns a blank white 1280x720 PNG (solution/server.py:100-101), T about 0, so raw is well below the floor and the score is 0. It shows nothing about solvability. The organiser baselines (compositor, real; zimage/flux2klein/html in pipeline/baselines/methods.py) are the solvability evidence, but only compositor and real are recorded in task.yaml.",
+  "issues": [
+    {
+      "category": "gate",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "Self-check has no OCR or judge. A renderer that silently fails on the grading host (missing fonts or a crashed Chromium) passes self-check and scores 0 after clamping. The agent cannot detect it.",
+      "evidence": [
+        "tests/task/verifier.py:22-23 'generate() on public pages ... no OCR, judge or review'",
+        "grade screenshot-generation-3yw6ax: raw 0.2143, invalid_images 0"
+      ],
+      "affects": "Browser and HTML-renderer approaches (Fable, Astra). Cost Fable 3yw6ax its $50 score."
+    },
+    {
+      "category": "metric",
+      "severity": "med",
+      "status": "confirmed",
+      "finding": "Above the floor, the score is driven by one stochastic single-digit judge call per image per axis: default temperature, with the seed only best-effort. Anchors were measured with one run each, so floor and ceiling also carry judge noise.",
+      "evidence": [
+        "environment/validation/screenshot_generation.py:66-68 'accepts only its default temperature ... `seed` gives best-effort determinism'",
+        "tests/task/task.yaml:52 'one run each (2026-10-07'"
+      ],
+      "affects": "All. Close calls such as $50 Opus 63.0 vs Astra 59.3 are within about 2 SE."
+    },
+    {
+      "category": "gate",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Cliff at the failure limit: up to 10 of 200 failed requests cost only their own images, but 11 zero the run. A per-image bug therefore becomes all-or-nothing.",
+      "evidence": [
+        "environment/validation/CONTRACT.md:11 'zero for the whole run if more than 1 request in 20 ends that way'",
+        "Argon 5xgpaj: '11 of 200 requests failed ... y1 must be greater than or equal to y0'"
+      ],
+      "affects": "Argon 5xgpaj (agent bug). By design, and disclosed."
+    },
+    {
+      "category": "anchor",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "The metric changed from a harmonic to an arithmetic mean of quality and R on 2026-10-01, and anchors were re-measured on 2026-10-07. Consistent for the published runs, but earlier tuning notes may not transfer.",
+      "evidence": [
+        "environment/validation/screenshot_generation.py:5-6 'operator decision 2026-10-01; a harmonic mean ... until then'",
+        "tests/task/task.yaml:52"
+      ],
+      "affects": "None among published runs."
+    },
+    {
+      "category": "heldout",
+      "severity": "low",
+      "status": "confirmed",
+      "finding": "Public (25) and held-out (500) are a seeded random, video-disjoint split of one internal pool, so there is no distribution shift (contrary to the blog's 'out-of-distribution'). Each run scores a fixed stratified 200 of the 500. Data governance: PII not filtered, human review pending, and the README says the internal data is 'local only, never upload' while source.json says it is published.",
+      "evidence": [
+        "tests/task/pipeline/internal/source.json:5 'personal_identifiers': 'not filtered'",
+        "tests/task/pipeline/internal/source.json:7-9 'seeded random 25 as public validation and 500 held-out' / 'human_review': 'PENDING' / 'published'",
+        "tests/task/pipeline/README.md:29 'local only, never upload'",
+        "tests/task/verifier.py:52-77 select_samples"
+      ],
+      "affects": "Fairness-neutral. The fixed shared subset makes comparisons paired."
+    },
+    {
+      "category": "neutrality",
+      "severity": "low",
+      "status": "suspected",
+      "finding": "Image-generation tools built into some harnesses (Codex 'imagegen') would let one family create assets outside the wallet. The rules do not mention it, and it was not exercised.",
+      "evidence": [
+        "audit trial_reviews/screenshot-generation.json elicitation: 'imagegen appears only in the system preamble'"
+      ],
+      "affects": "Potential advantage to GPT-6 Astra. None observed."
+    }
+  ]
+}

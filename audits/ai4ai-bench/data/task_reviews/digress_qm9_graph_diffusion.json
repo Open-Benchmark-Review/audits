@@ -1,0 +1,541 @@
+{
+ "task": "digress_qm9_graph_diffusion",
+ "task_level": {
+  "rubric_code": "FP",
+  "confirmed": true,
+  "counted_toward_threshold": false,
+  "hidden_data_integrity": [
+   "The test split is mounted only at scoring. Explore and retrain mount data/qm9_train_val (declaration.py:20, 28, 48); score mounts the full data/qm9_no_h (declaration.py:21, 99; assets.lock.yaml:58 phases [score]). The train/val asset copies only processed train/val tensors and train SMILES, and proc_test_no_h.pt is a byte-alias of validation (assets.lock.yaml:109-118, 134: 'No raw files or real test tensor enter exploration or retrain'). So the public seed-based DiGress split cannot be regenerated from raw QM9 inside the container. network_mode = no-network (task.toml:34).",
+   "Proxy and final are disjoint. Fast eval reports validation NLL (fast_eval.py:119-122, nll_split 'validation'); final reports test NLL on 13,388 test molecules (case pages).",
+   "QM9 is public, but the model is trained from scratch inside the container and patches cannot carry data, so memorisation of the test split is not a practical route.",
+   "The frozen grader tree /opt/harness/digress is readable, but it is byte-identical to the editable /workspace/digress (assets.lock.yaml:33-38). Reading it, which the benchmark flags as 'confirmed exposure' for claude-opus-5/low, reveals nothing hidden."
+  ],
+  "scorer_issues": [
+   "Lead refuted: the proxy is not blind to NLL. The fast headline is validity x uniqueness x novelty, but fast_eval also prints validation NLL as 'ranking_metric' (fast_eval.py:119-122; instruction.md:25 tells agents to use it).",
+   "Lead checked, not a hack: the likelihood computation is frozen, but its parameters come from the candidate. The scorer runs the pinned tree (final_eval.py:258-262; PYTHONPATH excludes /workspace, declaration.py:118), yet keeps upstream's `cfg = model.cfg` (final_eval.py:228-237). So T (model.diffusion_steps; solution/run.sh:63, solution/train.py:481), noise schedule, transition type and depth come from the checkpoint, and grade.py:351 records T only as a diagnostic. Because the frozen code computes a consistent variational bound for any such configuration, changing T or the transition is a model change, not a score forgery. Empirically T barely moves NLL: opus/low found cosine T=50-1000 'nearly flat'; kimi found eval-only T=1000 conversion worse (74); luna/medium's T=1000 gave 66.17; luna/high's T=200 gave 67.39. The best cell, sol/xhigh at 63.72, used the uniform transition with the same bound code.",
+   "Latent and not observed: the scorer unpickles candidate-authored checkpoints with torch 2.0.1 defaults, weights_only=False (final_eval.py:192, 792; Dockerfile.base:102). It then parses NLL as the last '(Test|Val) NLL' line of stdout (grade.py:83). A crafted pickle could run code in the scorer and print a fake NLL. terra/high's failure, where the pickle referenced a candidate-defined EMA class, shows candidate pickles do reach the scorer. All 25 observed NLLs (63.7-69.9) are plausible; UNCONFIRMED exploitation.",
+   "Selection and noise let a null patch pass (confirmed). gpt-5.6-terra/low changed only SAVE_INTERVAL and is effectively the shipped recipe. Its best-of-3 test NLL was 65.35, below the paper baseline 65.8, so it gets sigma 0.106 > 0.1. Six cells (opus/high, opus/xhigh, opus/low, sonnet/medium, sol/medium, terra/xhigh) are no better than this null replay yet are credited above baseline.",
+   "Environment caveat: case pages for 13 cells report an 'L20D' sm_103 GPU unsupported by the image's PyTorch 2.0.1/cu118 build (final_eval.py:322-325 notes the card is reached only via PTX JIT). luna/high and luna/xhigh fell back to CPU training (formal run 'trained on CPU for 41,722 s'), and luna/high's scoring first timed out and needed an evaluator hotfix. task.toml:30, 43 declare B300. Possible FN for those cells; not adjudicable from public data."
+  ],
+  "anchor_issues": [
+   "The baseline disagrees with the task's own reference. The paper uses 65.8 (scripts/score.py:25), but instruction.md:35-36 and every case page give fixed start 78.05 and shipped recipe 69.57. Twelve scored cells have 65.8 < NLL < 69.57: they 'beat the shipped recipe' by the task's own reference yet get sigma < 0.1. That reference does not reproduce, though: the unchanged-recipe formal replay (terra/low) reached 65.35. So the paper's 65.8 is close to a realistic replay baseline, and the case pages' 'vs 69.57' improvement claims are overstated. Lead: '17 of 29 cells below baseline' = 13 scored cells with NLL > 65.8 + 4 cells with no score (sigma 0); with respect to a null replay this is approximately right.",
+   "The optimum is unreachable. NLL 0 (scripts/score.py:25; u = infinity, phi = -x) is impossible for test NLL in nats on QM9, so sigma = 0.1 + 0.9*(65.8-x)/65.8 and the best cell (63.72) gets 0.128. All 25 scored cells lie in sigma 0.094-0.128, a band about as wide as the null-replay noise, so this task contributes almost no between-configuration signal beyond the 4 zeros.",
+   "Below-baseline handling with u = infinity: the paper's formula 0.1*(phi(x)-phi(u))/(phi(b)-phi(u)) is infinity/infinity and tends to 0.1 for every finite x. score.py:54-55 substitutes the paper convention 0.1*b/x, so a below-baseline NLL is barely penalised (terra/max 69.88 -> 0.094). Failing to submit gives 0, which dominates the task mean (0.089)."
+  ],
+  "noise": "No stderr or n is published per checkpoint (cases.json se=null). The NLL is a single-pass Monte Carlo variational estimate over 13,388 test graphs, with a random diffusion time per graph in DiGress. Within a single run, checkpoints differ by 0.02-2.9 NLL (luna/max 65.30/68.17/66.50; terra/medium 66.39/66.87/64.33). The unchanged recipe produced 66.37/66.72/65.35. Gaps below about 1-1.5 NLL between configurations are inside this band, which covers 18 of the 25 scored cells (65.2-66.9). Only sol/xhigh (63.72), terra/medium (64.33) and arguably opus/max (64.85) separate from the null replay.",
+  "checkpoint_selection": "Of 25 scored cells, 15 report a best checkpoint that is not the last. Best-of-3 minus last is +0.0024 sigma on the task mean (0.0890 vs 0.0866). Six of the 12 cells credited above baseline flip below baseline under the last checkpoint: claude-opus-5 high/max/xhigh, kimi-k3 max, gpt-5.6-luna max, gpt-5.6-terra xhigh. Selection is on test NLL itself (orchestrator/final_score.py:143-148), so half of the 'beats baseline' outcomes are produced by picking the luckiest of three noisy test-set evaluations.",
+  "evidence": [
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/declaration.py:20-21,28,48,99 train/val alias mount for explore+retrain; full asset only in score",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/environment/assets.lock.yaml:58,107-134 score-only test asset; proc_test aliases validation; no raw files",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/harness/fast_eval.py:119-122 fast eval reports validation NLL as ranking metric",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/harness/final_eval.py:228-237 evaluator keeps `cfg = model.cfg` (candidate cfg drives the frozen NLL code)",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/harness/final_eval.py:258-262 scoring uses /opt/harness/digress, not /workspace",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/harness/final_eval.py:192 torch.load without weights_only (torch 2.0.1, environment/Dockerfile.base:102)",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/harness/grade.py:83 NLL parsed as last '(Test|Val) NLL' line of stdout",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/harness/grade.py:351 diffusion_steps recorded only as diagnostic",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/solution/run.sh:63 and solution/train.py:481 DIFFUSION_STEPS is an editable knob",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/instruction.md:25,35-36 VUN headline + validation NLL; shipped 69.57, start 78.05",
+   "einsia/ai4ai-bench/tasks/digress_qm9_graph_diffusion/task.toml:34 network_mode = no-network",
+   "audits/ai4ai-bench/scripts/score.py:25,54-55 anchors (65.8, inf, 0) and 0.1*b/x below-baseline convention",
+   "case page codex__digress_qm9_graph_diffusion__gpt-5.6-terra__low: 'submitted only a 50-to-25-epoch save-interval change; formal testing reached 65.35'",
+   "case page codex__digress_qm9_graph_diffusion__gpt-5.6-luna__high: 'The scientifically valid formal run trained on CPU'"
+  ],
+  "summary": "Hidden-data isolation holds: real test tensors are score-only and the train asset aliases validation. The proxy is not blind, since fast eval also reports validation NLL. The NLL cannot be forged through T or the transition, because the frozen code computes a valid bound for whatever configuration the checkpoint carries; the one latent forgery path is pickle code execution plus stdout parsing, which was not observed. The confirmed defect is noise plus best-of-3 test-set selection. An effectively unchanged recipe (terra/low) scores 65.35, below the paper baseline 65.8, and 6 of the 12 above-baseline cells fall back below baseline under the last checkpoint. FP is confirmed but not counted, because the sigma at stake is <=0.006 per cell. The optimum-0 anchor squeezes every scored cell into sigma 0.094-0.128, so the task's mean (0.089) is driven by 4 failed or empty submissions. The paper baseline (65.8) disagrees with the task's own shipped reference (69.57), but that reference does not reproduce under formal replay, so the case pages' 'beats 69.57' claims are overstated."
+ },
+ "cells": [
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-opus-5__high",
+   "model": "claude-opus-5",
+   "effort": "high",
+   "official_best": 65.66,
+   "sigma_best": 0.1019,
+   "approach": "Same DiGress objective; single-GPU loader acceleration, warmup + wall-clock cosine LR, EMA weights exported, spread checkpoint publication.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Its best official test NLL was 65.66 versus the same-protocol shipped 69.57'",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell's best is no better, yet it sits below the paper baseline 65.8, so it is credited sigma > 0.1 on noise.",
+    "Best is the earliest checkpoint (859); last 66.02 would be sigma < 0.1."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-opus-5__low",
+   "model": "claude-opus-5",
+   "effort": "low",
+   "official_best": 65.38,
+   "sigma_best": 0.1057,
+   "approach": "Same objective; eight loader workers, warmup + wall-clock cosine to 2% LR, absolute deadline, guarded EMA export. A spurious 6-NLL noise-schedule gain was correctly retracted.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 65.38 (last checkpoint).",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell's best is no better, yet it sits below the paper baseline 65.8, so it is credited sigma > 0.1 on noise.",
+    "Benchmark flags confirmed exposure: the agent read /opt/harness/digress, which is byte-identical to /workspace/digress (assets.lock.yaml:33-38), so it gained no information - consistent with 'No exposed numeric constant is shown entering the patch'."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-opus-5__max",
+   "model": "claude-opus-5",
+   "effort": "max",
+   "official_best": 64.85,
+   "sigma_best": 0.113,
+   "approach": "Throughput fixes (serial loading, CUDA sync), peak LR 1.6e-3 with warmup and wall-clock cosine decay, EMA export, multi-route checkpointing; T=500 model unchanged.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'The best real-test negative log-likelihood (NLL) was 64.85'",
+    "0.5 NLL below the null replay's best; other checkpoints 65.69/66.57, so margin is modest. Flips to sigma < 0.1 under last checkpoint."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-opus-5__medium",
+   "model": "claude-opus-5",
+   "effort": "medium",
+   "official_best": 65.84,
+   "sigma_best": 0.0999,
+   "approach": "12-layer Transformer, EMA 0.999, warmup + wall-clock cosine, loader fixes; optional VLB term inactive.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 65.84 (sigma 0.0999).",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-opus-5__xhigh",
+   "model": "claude-opus-5",
+   "effort": "xhigh",
+   "official_best": 65.79,
+   "sigma_best": 0.1001,
+   "approach": "GPU-resident shuffling, batch 1,024, LR 4e-4 with warmup + wall-clock cosine, TF32, EMA; model/objective unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'best official real-test NLL ... was 65.79 versus the shipped 69.57'",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell's best is no better, yet it sits below the paper baseline 65.8, so it is credited sigma > 0.1 on noise.",
+    "sigma 0.1001, i.e. 0.01 NLL inside the paper baseline."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-sonnet-5__high",
+   "model": "claude-sonnet-5",
+   "effort": "high",
+   "official_best": 66.47,
+   "sigma_best": 0.099,
+   "approach": "Wall-clock schedule with 200,000-epoch ceiling, validation-plateau LR scheduling, near-disabled training-time sampling, 900 s checkpoints.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 66.47.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-sonnet-5__low",
+   "model": "claude-sonnet-5",
+   "effort": "low",
+   "official_best": 66.32,
+   "sigma_best": 0.0992,
+   "approach": "40-epoch cosine-with-restarts LR schedule, saves every 40 epochs, wall-clock stop; nothing else changed.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 66.32.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-sonnet-5__max",
+   "model": "claude-sonnet-5",
+   "effort": "max",
+   "official_best": 66.17,
+   "sigma_best": 0.0994,
+   "approach": "Merged train+validation rows (117,777), ramped EMA to 0.9999, long schedule, checkpoint safeguards.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 66.17.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57.",
+    "Training on validation rows is allowed by instruction.md:47."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-sonnet-5__medium",
+   "model": "claude-sonnet-5",
+   "effort": "medium",
+   "official_best": 65.36,
+   "sigma_best": 0.106,
+   "approach": "Longer training with wall-clock LR schedule and checkpoint engineering; objective/model unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'best real-test negative log-likelihood (NLL) 65.36'",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell's best is no better, yet it sits below the paper baseline 65.8, so it is credited sigma > 0.1 on noise."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__claude-sonnet-5__xhigh",
+   "model": "claude-sonnet-5",
+   "effort": "xhigh",
+   "official_best": 66.64,
+   "sigma_best": 0.0987,
+   "approach": "Longer wall-clock schedule, validation-best saves and 5,000-epoch early-stop patience; algorithm unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 66.64.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57.",
+    "Benchmark marks conduct 'Suspected' (early idle submission), which does not affect the score."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-luna__high",
+   "model": "gpt-5.6-luna",
+   "effort": "high",
+   "official_best": 67.39,
+   "sigma_best": 0.0976,
+   "approach": "Training moved to CPU after the image's PyTorch stalled on the sm_103 GPU; LR 3e-4, diffusion steps 500->200, denser saves.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'The scientifically valid formal run trained on CPU'; 'CUDA warned that L20D capability sm_103 was absent from the image's supported PyTorch kernels'",
+    "Poor NLL 67.39 is partly an environment artefact (final_eval.py:322-325 notes the image reaches the card only via PTX JIT); possible FN, not adjudicable."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-luna__low",
+   "model": "gpt-5.6-luna",
+   "effort": "low",
+   "official_best": null,
+   "sigma_best": 0.0,
+   "approach": "Zero-byte patch; no candidate.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "cases.json status 'Source unavailable'; case page: 'this trajectory produced no score'. sigma 0 under the no-model rule."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-luna__max",
+   "model": "gpt-5.6-luna",
+   "effort": "max",
+   "official_best": 65.3,
+   "sigma_best": 0.1068,
+   "approach": "Stratified diffusion-time sampling within batches, effective seeding, skipped sanity validation, denser publication.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Formal progress 449 achieved test NLL 65.30'",
+    "0.05 below the null replay's 65.35; other checkpoints 68.17/66.50."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-luna__medium",
+   "model": "gpt-5.6-luna",
+   "effort": "medium",
+   "official_best": 66.17,
+   "sigma_best": 0.0994,
+   "approach": "Only doubled diffusion steps 500->1,000 (the frozen evaluator computes the bound with the checkpoint's T).",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'The candidate only doubled diffusion steps from 500 to 1,000; checkpoint 399 reached ... 66.17'",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-luna__none",
+   "model": "gpt-5.6-luna",
+   "effort": "none",
+   "official_best": null,
+   "sigma_best": 0.0,
+   "approach": "Unchanged algorithm with a 1,000,000-epoch ceiling and shorter saving; formal replay failed at epoch-14 validation.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'formal replay failed in epoch-14 validation with no artifact'; candidate-caused terminal behaviour."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-luna__xhigh",
+   "model": "gpt-5.6-luna",
+   "effort": "xhigh",
+   "official_best": 68.31,
+   "sigma_best": 0.0963,
+   "approach": "CPU-fallback 200-step, 12-layer recipe adopted after GPU hangs on the unsupported device.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 68.31.",
+    "Case page: 'After diagnosing an unsupported L20D/PyTorch CUDA path, the agent submitted a 200-step, 12-layer CPU-compatible recipe'; environment artefact plausible."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-sol__high",
+   "model": "gpt-5.6-sol",
+   "effort": "high",
+   "official_best": 66.03,
+   "sigma_best": 0.0997,
+   "approach": "Edge-loss weight 5->10, seeded wall-clock LR schedule to 1% floor, disabled training-time generation.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 66.03.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-sol__low",
+   "model": "gpt-5.6-sol",
+   "effort": "low",
+   "official_best": 66.88,
+   "sigma_best": 0.0984,
+   "approach": "LR 3e-4, TF32, leaner validation/generation, denser publication.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 66.88.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-sol__max",
+   "model": "gpt-5.6-sol",
+   "effort": "max",
+   "official_best": 65.94,
+   "sigma_best": 0.0998,
+   "approach": "All 117,776 allowed graphs, batch 1,024, LR 5e-4, bond weight 10, EMA, wall-clock cosine.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 65.94.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-sol__medium",
+   "model": "gpt-5.6-sol",
+   "effort": "medium",
+   "official_best": 65.52,
+   "sigma_best": 0.1038,
+   "approach": "LR 2e-4->4e-4 with cosine decay, AMSGrad, cheaper diagnostics; model/objective unchanged.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Best official real-test NLL fell from the shipped 69.57 to 65.52.'",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell's best is no better, yet it sits below the paper baseline 65.8, so it is credited sigma > 0.1 on noise."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-sol__none",
+   "model": "gpt-5.6-sol",
+   "effort": "none",
+   "official_best": 67.01,
+   "sigma_best": 0.0982,
+   "approach": "Per-step cosine LR, TF32, single-GPU strategy, no post-fit evaluation, three late checkpoints.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Best 67.01.",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell is worse than that replay, so sigma < 0.1 is correct even though the case page reports a gain against the declared 69.57."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-sol__xhigh",
+   "model": "gpt-5.6-sol",
+   "effort": "xhigh",
+   "official_best": 63.72,
+   "sigma_best": 0.1284,
+   "approach": "Uniform (instead of marginal) categorical transition, batch 2,048, LR 4e-4 with exponential decay; still T=500 and the same loss.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'The agent submitted uniform corruption, batch 2,048, and decayed 4e-4; best official hidden-test NLL was 63.72'",
+    "Uniform transition changes the model's prior/limit distribution; the frozen code computes a valid bound for it, so this is not a hack. Best is the earliest checkpoint (30000); last 65.66 still below baseline."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-terra__high",
+   "model": "gpt-5.6-terra",
+   "effort": "high",
+   "official_best": null,
+   "sigma_best": 0.0,
+   "approach": "11-layer model with warm-started EMA as a new pickled class; checkpoints failed to load in the frozen evaluator, so no score.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Frozen source lacked the new EMA class, so no official score resulted.' instruction.md:19 requires loadability by the frozen evaluator."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-terra__low",
+   "model": "gpt-5.6-terra",
+   "effort": "low",
+   "official_best": 65.35,
+   "sigma_best": 0.1062,
+   "approach": "Only change: SAVE_INTERVAL 50->25 epochs; this is effectively a replay of the shipped recipe.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'submitted only a 50-to-25-epoch save-interval change; formal testing reached 65.35 without establishing causal patch benefit'; 'epoch 449 would also be published under the original 50-epoch cadence'",
+    "An unchanged recipe beats the paper baseline 65.8 (sigma 0.106) and the declared shipped 69.57 by 4.2 NLL."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-terra__max",
+   "model": "gpt-5.6-terra",
+   "effort": "max",
+   "official_best": 69.88,
+   "sigma_best": 0.0942,
+   "approach": "Effective seeding, MultiStepLR halving schedule, runtime fixes, validation-best export.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Best official test NLL was 69.88, still 0.31 worse than the same-protocol shipped 69.57.'"
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-terra__medium",
+   "model": "gpt-5.6-terra",
+   "effort": "medium",
+   "official_best": 64.33,
+   "sigma_best": 0.1201,
+   "approach": "LR 2e-4->3e-4, removed evaluation overhead, high matmul precision.",
+   "classification": "engineering",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'formal replay beat the public shipped reference 69.57 by 5.24 NLL' (64.33).",
+    "1.0 below the null replay's best; last checkpoint."
+   ],
+   "confidence": "medium"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-terra__none",
+   "model": "gpt-5.6-terra",
+   "effort": "none",
+   "official_best": null,
+   "sigma_best": 0.0,
+   "approach": "Empty patch; no candidate.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "agree",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'candidate.patch is empty ... this trajectory has no score'. sigma 0."
+   ],
+   "confidence": "high"
+  },
+  {
+   "case": "codex__digress_qm9_graph_diffusion__gpt-5.6-terra__xhigh",
+   "model": "gpt-5.6-terra",
+   "effort": "xhigh",
+   "official_best": 65.62,
+   "sigma_best": 0.1025,
+   "approach": "Bond loss weight 5->10 and saves every 5 epochs; 12 epochs requested.",
+   "classification": "no_gain",
+   "novelty": "none",
+   "grader_agreement": "false_positive",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'Formal replay's best test NLL was 65.62 versus the shipped 69.57'",
+    "Unchanged-recipe replay (terra/low, only SAVE_INTERVAL changed) scored best-of-3 65.35 (checkpoints 66.37/66.72/65.35); this cell's best is no better, yet it sits below the paper baseline 65.8, so it is credited sigma > 0.1 on noise.",
+    "Last checkpoint 66.56 would be sigma < 0.1."
+   ],
+   "confidence": "low"
+  },
+  {
+   "case": "claude__digress_qm9_graph_diffusion__kimi-k3__max",
+   "model": "kimi-k3",
+   "effort": "max",
+   "official_best": 65.24,
+   "sigma_best": 0.1077,
+   "approach": "Batch 1,024, warmup + wall-clock cosine LR, per-update EMA, sparse diagnostics, tail reserve; objective unchanged.",
+   "classification": "engineering",
+   "novelty": "known_technique",
+   "grader_agreement": "unclear",
+   "benchmark_audit_agreement": "agree",
+   "evidence": [
+    "Case page: 'reached real-test NLL 65.24 versus the same-protocol 69.57'",
+    "Only 0.11 below the null replay's 65.35; last checkpoint 66.43 (sigma < 0.1)."
+   ],
+   "confidence": "low"
+  }
+ ]
+}

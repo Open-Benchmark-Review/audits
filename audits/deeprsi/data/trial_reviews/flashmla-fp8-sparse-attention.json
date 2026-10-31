@@ -1,0 +1,225 @@
+{
+  "task": "flashmla-fp8-sparse-attention",
+  "task_level": {
+    "spec_issues": [
+      "The overview and the prompt agree on the essentials: only edits under the FlashMLA tree count, the API must be kept, and attention must be computed on every call with no caching of outputs or inputs. The prompt explicitly asks for speed 'mainly for the roofline-b128-q3-h128-k1152-c32768 workload', so shape-specific tuning for that one scored shape is sanctioned rather than grey-area. The private test uses the same shape with new random values.",
+      "The test values are synthetic (manifest 'values': exponents [-2, 2], shift 2, heavy_fraction ~0.002). Changes that depend on value range are therefore exercised only within that range. Example: both Fable runs switch K/V/Q/S from bf16 to f16 inside the MMA, and bzbjY7F's e8m0_to_f16_bits returns inf bits for scale bytes >= 143, with no bf16 fallback. Such changes pass all 30 cases but are not checked against extreme real-model scales. The mismatch is mild: realistic MODEL1 KV scales are well inside f16 range.",
+      "The rules do not say whether removing API input validation counts against a solution: Python sched_meta assertions removed (Flash SbKHBpr/xDV8YoF, Argon 4spndZs fast path), device printf assertions removed in combine (Argon uEzwiyH), or persistent scratch workspaces reused across calls and streams (Fable 28iwPAQ, Flash xDV8YoF, Argon uEzwiyH). None of these affects benchmark correctness; they only weaken robustness in production."
+    ],
+    "verifier_issues": [
+      "The anti-caching design is sound. KV and sink values are mutated in place between the four 32-call timed blocks, and the first call after each mutation plus one random call per block are checked against a high-precision reference ('Missing post-mutation or sampled timed-output correctness'). Builds are made from source and the 30 correctness cases include stress variants of the scored shape (peaked, shifted, short rows, large shift, query gain, 8x scale, scattered indices). The scattered-index stress case would catch any fast path that assumed the window indices are contiguous. No trial caches outputs or inputs. The caches added are TMA descriptors keyed on pointer, shape and stride, plus scratch buffers.",
+      "Baseline re-measurement is noisy. The official baseline_rate ranges from 1.513M to 1.690M tokens/s across the 10 trials that report it, an 11.7% spread. Within one trial, a public run measured the baseline at 1.28M and reported a 1.318x ratio for an artifact whose other runs gave about 1.05x (Kimi MpCzQCJ step [896]: '31.76% outlier with an anomalously slow baseline'). Fable's two runs have the same candidate rate (1.854M vs 1.860M) but rewards of 0.146 vs 0.192, a gap caused entirely by the baseline (1.618M vs 1.561M).",
+      "The GPT-6 Astra summaries have an empty 'rewards' breakdown (no baseline/candidate rate), so their scores cannot be checked against the noise. Their own public-verifier runs (1.39-1.42x) agree with the official 0.40-0.43.",
+      "Grok ZSBYrDS lost about 47 of its 48 hours to two hung tool calls (step [128] arrives 23 h after step [127]; step [129]: 'The last timing run didn't return a result'). That is an infrastructure or timeout gap, not model behaviour."
+    ],
+    "noise": "Repeated public-verifier runs of one artifact vary by about 1-3 points of ratio (Kimi MpCzQCJ 1.045-1.058 apart from the 1.318 outlier; Fable bzbjY7F 1.129-1.140; Kimi D6dpNVs 1.003-1.037). The official run can differ from the agent's final public runs by about 5 points (Fable bzbjY7F 1.134 locally vs 1.192 officially; Flash SbKHBpr 1.062 at step [493] vs 1.115 officially), mostly through a low baseline. The winner is robust: GPT-6 (1.40/1.43) beats Argon (1.27/1.28) by well over the noise. Mid-table pairwise results are not robust. Kimi MpCzQCJ's candidate rate (1.720M) exceeds Flash SbKHBpr's (1.687M), yet it 'loses' 0.068 vs 0.115 because SbKHBpr drew the lowest baseline (1.513M). Fable vs Flash xDV8YoF is about 2.5% apart in candidate rate (1.854M vs 1.812M) but 4-9 points apart in reward.",
+    "epoch_scoring_item": "pass",
+    "epoch_rationale": "No false positives or negatives were found, and the task winner (GPT-6 Astra, about 1.40-1.43x vs Argon about 1.27x) is far outside baseline noise. Baseline drift of about 12% does flip some mid-table Elo pairs (Kimi vs Flash) and inflates individual rewards by up to about 5 points, but it does not change who wins.",
+    "science_vs_gaming": "Essentially all of the gain is honest, routine kernel engineering on an already expert-tuned kernel: rebalancing the split-KV schedule (fixed_overhead_num_blocks 3 -> 0, flattening b*s_q, compacting or fusing the combine), deeper index/scale pipelines, cheaper FP8->16-bit dequantisation, TMA cache hints, host-overhead removal (cached tensor maps and workspaces, a Python fast path), and in Fable bzbjY7F a new persistent fused decode kernel. Nothing exploits the verifier. The only benchmark-shaped choices are tuning for the single scored shape (Argon 4spndZs's 'grid_x == 14' combine launch matches 384 % 74 = 14 tail requests), which the prompt invites, and Fable's f16 range assumption. Nothing qualifies as research."
+  },
+  "trials": [
+    {
+      "model": "claude-fable-5.1",
+      "trial": "28iwPAQ",
+      "official_reward": 0.14593041556936392,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Inside the existing split-KV phase-1 kernel, K/V/S/Q become f16 for the MMA, so e4m3 dequantises with a single cvt.rn.f16x2.e4m3x2 plus an e8m0->f16 lookup table. The patch also sets fixed_overhead_num_blocks to 0, skips masking for fully valid blocks, keeps a persistent per-device o_accum/lse_accum workspace, and retiles the combine kernel. 1.146x officially.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch phase1.cuh: 'using kv_t = std::conditional_t<IS_DECODE, cutlass::half_t, bf16>;   // K/V/S element type in smem' and the 'e8m0 -> f16x2 scale factor lookup table' that clamps out-of-range scales (min(e, 142u)). This narrows range rather than precision; it passes all 30 cases including stress-scale and large-shift.",
+        "sparse_decode.h: a persistent grow-only workspace ('Consecutive calls on the same stream are ordered by the stream, so reusing the workspace is safe'). This is scratch reuse, not output caching.",
+        "step [941]: '30/30 manifest cases pass; ... the official public verifier scored the near-identical previous state at 210.8 \u00b5s vs. 243.9 \u00b5s baseline (reward 0.157)'."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "claude-fable-5.1",
+      "trial": "bzbjY7F",
+      "official_reward": 0.19197869321700378,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "A new fused persistent sm100 decode kernel (csrc/sm100/decode/head128_model1/) with in-kernel merging of splits through per-call epoch counters, f16 operands, magic-number page division and a cluster scheduler. It is dispatched for any sm100 h_q=128 MODEL1 call whose 32-bit offsets fit. 1.19x officially, but 1.13-1.14x on the agent's own public runs. Its candidate rate equals 28iwPAQ's, so the higher reward comes from a lower baseline draw.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch sparse_decode.h: 'Fast path: MODEL1 (d_qk == 512) with 128 heads on sm100 -> fused persistent kernel with in-kernel split merging'; h128_model1_ok checks h_q == 128 && h_kv == 1 && d_qk == 512 && d_v == 512 plus addressing limits. It is general, not specific to b=128.",
+        "kernel.cuh e8m0_to_f16_bits: 'return (v >= 113u) ? ((v - 112u) << 10) : ...'. Scale bytes >= 143 give f16 inf bits, and 448*2^8 already overflows f16, with no bf16 fallback. This assumes a value range the synthetic tests never stress.",
+        "Noise: step [659] public run ratio 1.134 vs official 1.192; official candidate_rate 1.860M equals 28iwPAQ's 1.854M while baseline_rate is 1.561M vs 1.618M."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "SbKHBpr",
+      "official_reward": 0.11503069259504328,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Micro-optimisations to the phase-1 kernel (TMA gather4 with cache hints, precomputed addresses, intrinsics). Accumulator buffers are reused through sched_meta, and the combine grid and scheduler metadata are trimmed. The Python-side sched_meta consistency asserts were removed. 1.115x officially vs 1.062x on its last public run.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch flash_mla_interface.py removes the block of 'assert sched_meta.config.b == q.shape[0] ...' consistency checks and passes o_accum/lse_accum through sched_meta. This is host overhead and API validation, not benchmark correctness.",
+        "step [493]: public verifier throughput_ratio 1.0625. The official 1.115 came with the lowest official baseline of any trial (1.513M)."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "gemini-3.8-flash",
+      "trial": "xDV8YoF",
+      "official_reward": 0.10609576097108109,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "A broad set of micro-optimisations: parallel index computation, removal of smem bank conflicts in dequantisation, 16-way parallel TMA gather issue with EVICT_FIRST, a combine grid cut to split requests only with a 2-split register fast path, cached tensor maps and accumulators, and a Python fast path. 1.106x.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "step [1240] summary: 'Skewed column access orders ... reducing LDS bank conflict wavefronts by >86%'; 'Switched TMA gather cache policy from EVICT_LAST to EVICT_FIRST'; 'Cached persistent CUtensorMap descriptors, o_accum, and lse_accum buffers across calls'.",
+        "The cache keys include pointers ('cached_q.q_ptr == params.q && ...'), so the descriptors are never stale. Nothing caches outputs.",
+        "Its public runs gave 1.100-1.117 with baselines of 1.554-1.606M, consistent with the official result."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "4spndZs",
+      "official_reward": 0.2792398639877558,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "A deeply tuned phase-1 kernel (pipelining, cheap e4m3->bf16 conversion via f16 cvt with a 2^112-prescaled scale, register and I-cache tuning). It adds a 'sparse_decode_fwd_cached' entry that skips the Python checks, static cached TMA descriptors, and a combine launch special-cased for 14 combine requests, which is exactly the tail count of the scored shape (384 % 74). 1.28x.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch combine.cu: 'if (grid_x == 14 && params.h_q == 128 && max_splits <= 4 && ...)' with a general fallback. This is a shape-tuned launch configuration, which the prompt sanctions ('mainly for the roofline-... workload'), and a small part of the gain. Step [580] shows it being tuned.",
+        "flash_mla_interface.py: 'if tile_scheduler_metadata.have_initialized and indices is not None and softmax_scale is not None: return flash_mla_cuda.sparse_decode_fwd_cached(...)', which only bypasses host-side asserts.",
+        "Cached CUtensorMaps are keyed on 'params.q == last_q_ptr && ...' (pointer, shape and stride), so there is no stale data; KV mutation checks still pass.",
+        "Its public runs gave speedup 1.266-1.281, consistent with the official 1.279."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gemini-4-argon",
+      "trial": "uEzwiyH",
+      "official_reward": 0.2664318006391888,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Triple buffering within shared memory, decoupled coordinate and scale barriers, FastDivmod paging, early buffer release, and bit-exact fast FP8 dequantisation. The schedule uses fixed_overhead_num_blocks=0 with compacted split requests, and the combine kernel gets a smaller grid and a 2-split fast path. Device printf asserts were removed. 1.266x.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "step [742] summary: 'Enabled 3-stage buffering (NUM_RAW_K_BUFS = 3, NUM_INDEX_BUFS = 3)'; 'Set fixed_overhead_num_blocks = 0 ... so all 24 SM parts receive an exact 96 KV blocks'; 'removed device printf assertions'.",
+        "The Python API asserts were replaced by an equivalent 'raise AssertionError(...)' check, so validation is kept.",
+        "103 public-verifier runs; the last 5 gave 1.259-1.267, matching the official 1.266."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "6kLeWj3",
+      "official_reward": 0.4285655635964647,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Rebuilt the split-KV schedule for h_q=128/d_qk=512 on sm100. Batch and query are flattened so that every SM pair owns equal whole-query prefixes plus one tail fragment. Uniform and flat tail schedules come with a compact o_accum (two slots per partition) and a tail-only combine. Raw FP8 K staging and dequantisation were also reworked. 1.43x, the task's best.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch sparse_decode.h: 'const bool flat_tail_schedule = arch.is_sm100f() && h_q == 128 && d_qk == 512 && use_flat_tail_schedule(...)'. use_flat_tail_schedule is a general predicate over (b*s_q) % parts, topk % 64 and blocks >= fragments, not pinned to b=128.",
+        "Only a tail of logical requests is combined ('combine_params.b = tail; ... run_flash_mla_combine_kernel_for_flat_tail'). Every token is still attended, and no caching is introduced.",
+        "step [3032]: '1.4167\u00d7 baseline throughput ... All 30 cases pass; mutation, graph, and CUDA sanitizer checks passed'. summary.json 'rewards' is empty, so the official baseline cannot be inspected."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "gpt-6-astra",
+      "trial": "Nh2feRz",
+      "official_reward": 0.39943090151173344,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Reworked FP8 staging and dequantisation (rotated layout, PV collector, direct output). Split outputs are fused into the main kernel: the last-arriving CTA combines them via per-call split counters, so the separate combine kernel is dropped. Normalised split partials are stored in bf16 while LSE and the combine arithmetic stay in fp32. 1.40x.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch sparse_decode.h: 'The native H128/D512 kernel transports normalized split outputs in BF16. Dot products, normalization, LSE, and the weighted combine remain FP32'. This adds one bf16 rounding before the final bf16 output, which is mild and within the 2.01/128 element tolerance.",
+        "'split_counter ... Fresh per-call [b, s_q, 2] publication counters' are reset with cudaMemsetAsync on every call, so no state carries across calls.",
+        "step [2435]: 'Final rebuild passed all 30 cases at three seeds ... graph/mutation replay checks, and limited memcheck with 0 errors'."
+      ],
+      "confidence": "high"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "SBRceHp",
+      "official_reward": 0.0,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Small changes to the phase-1 kernel: e8m0->bf16 scale conversion moved into the index warp, an optional f16 K path left disabled, a static split workspace, and -source-in-ptx removed. The agent measured about +0.5% with its own paired timer and never ran the public verifier. Officially 0.84x, so reward 0.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "evidence": [
+        "step [1063]: 'The paired scored-case timing is about 0.5% faster (0.2246 ms vs 0.2256 ms)'.",
+        "No 'throughput_ratio' line appears anywhere in the trajectory, so the public benchmark was never run. Official throughput_ratio is 0.840 (valid=1).",
+        "The cause of the 16% official regression is not visible in public data. Reward would be about 0 either way."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "grok-4.7",
+      "trial": "ZSBYrDS",
+      "official_reward": 0.0,
+      "official_status": "invalid",
+      "official_reason": null,
+      "approach": "Began a new 'fwd_fast128' phase-1 kernel variant registered in setup.py. Two tool calls hung for about 23-24 h each, so the run had only about 1 hour of real work. The last timing run of the fast kernel never returned, and the submission was officially invalid.",
+      "classification": "no_gain",
+      "novelty": "none",
+      "grader_agreement": "agree",
+      "evidence": [
+        "step [128] (2026-10-06T09:51) follows step [127] (2026-10-05T10:48); step [129]: 'The last timing run didn't return a result'. The new kernel probably hangs or times out.",
+        "patch setup.py adds 'csrc/sm100/prefill/sparse/fwd_fast128/head128/instantiations/phase1_decode_k512.cu'. There is no official public-verifier run in the trajectory.",
+        "Missing: the verifier failure reason (build, timeout or numerics). Invalid status is most likely ordinary."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "D6dpNVs",
+      "official_reward": 0.023121698668238544,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Four one-line tweaks: fixed_overhead_num_blocks 3->0, NUM_INDEX_BUFS 4->6, TMA gather cache hint EVICT_LAST->EVICT_FIRST, and streaming stores (__stcs) in combine. The other added files are helper scripts outside the FlashMLA tree, which the grader ignores. 1.023x, which is within noise.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "The FlashMLA part of the patch is about 10 changed lines across sparse_decode.h, config.h, phase1.cuh and combine.cu. bench_local.py and the other scripts sit at the repo root and do not count.",
+        "Its public runs ranged 1.003-1.037, so the 2.3% gain is at noise level. It still beats both Grok runs (0.84x and invalid) in pairwise Elo."
+      ],
+      "confidence": "medium"
+    },
+    {
+      "model": "kimi-k3",
+      "trial": "MpCzQCJ",
+      "official_reward": 0.06774603916226463,
+      "official_status": "scored",
+      "official_reason": null,
+      "approach": "Split partial outputs stored in bf16 for h=128 (combine templated on the accumulator type), flattened scheduling, combine grid and epilogue tweaks, and workspace reuse. 1.068x officially. The agent's own runs mostly gave 1.045-1.058, apart from one 1.318 outlier caused by a slow baseline.",
+      "classification": "engineering",
+      "novelty": "known_technique",
+      "grader_agreement": "agree",
+      "evidence": [
+        "patch sparse_decode.h: 'o_w = torch::empty({total_num_splits, s_q, h_q, d_v}, opts.dtype(h_q == 128 ? at::kBFloat16 : at::kFloat))', a bf16 o_accum with combine<bf16, bf16>.",
+        "step [896]: '6.74%, 5.92% (plus a 31.76% outlier with an anomalously slow baseline)', where baseline_rate was 1279531 vs a usual ~1.59-1.63M.",
+        "Its candidate_rate (1.720M) exceeds Flash SbKHBpr's (1.687M), yet its reward is lower. This mid-table pair is decided by baseline noise."
+      ],
+      "confidence": "high"
+    }
+  ]
+}

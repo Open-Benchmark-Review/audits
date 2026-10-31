@@ -1,0 +1,2 @@
+task_id,category,classification,confirmed,counted_toward_threshold,error_subtype,evidence,runs_affected,notes
+example_task,Database,FP,yes,yes,lax_scorer,judge/evaluate.py:120 checks only output length,"model_a,model_b",Scorer accepts any non-empty output

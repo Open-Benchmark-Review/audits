@@ -1,0 +1,6 @@
+records flagged by at least one mechanical check: 79 of 169 (47%)
+  sibling-inconsistent gold: 51
+  injected command not in gold: 15
+  red-team order in monitor input: 14
+  identical transcript, different gold: 2
+  by family: {'hbv2-injected': 12, 'hbv2-injected-legit': 2, 'natural-other': 3, 'natural-red_team': 14, 'task-specific-generated': 48}
